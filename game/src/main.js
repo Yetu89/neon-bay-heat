@@ -1,14 +1,16 @@
 // Neon Bay Heat — boot and the one loop: input is read every frame, the world
 // advances in fixed 1/60 s steps, and the renderer paints what is there. The game
 // moves between title, play, paused, busted, wasted and story-complete screens.
+// While the tuning panel is open the simulation waits: the player is in the
+// garage, not on the street.
 //
 // ?seed=N fixes the city and the traffic. ?shot=start|play|foot|end (with &seed=N)
 // stages that scene instead of running the loop, paints it twice and sets
 // window.__shotReady for a screenshot.
-import { STEP } from './config.js';
+import { MISSIONS, STEP } from './config.js';
 import { createRandom } from './random.js';
 import { createWorld, SCREEN_BUSTED, SCREEN_COMPLETE, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE, SCREEN_WASTED } from './world.js';
-import { ACTION_CONFIRM, ACTION_MUTE, ACTION_PAUSE, createInput } from './input.js';
+import { ACTION_CONFIRM, ACTION_MUTE, ACTION_PAUSE, ACTION_TUNING, createInput } from './input.js';
 import { stageShot } from './shots.js';
 
 const MAX_FRAME = 0.25;
@@ -47,10 +49,10 @@ function showOnly(name) {
 function refreshTitle() {
   const save = world.loadSave();
   if (save && (save.cash > 0 || save.missionsDone > 0 || save.finished)) {
-    titleStats.textContent = `Saved: $${(save.cash || 0).toLocaleString('en-US')} • Missions done: ${save.missionsDone || 0}/5 • Tokens: ${(save.tokensTaken || []).filter(Boolean).length}/10`;
+    titleStats.textContent = `Saved: $${(save.cash || 0).toLocaleString('en-US')} • Missions done: ${save.missionsDone || 0}/${MISSIONS.length} • Tokens: ${(save.tokensTaken || []).filter(Boolean).length}/10`;
     continueButton.classList.remove('hidden');
   } else {
-    titleStats.textContent = 'A sun-soaked city. Five jobs. One wheelman.';
+    titleStats.textContent = 'A sun-soaked city. Six jobs. One wheelman.';
     continueButton.classList.add('hidden');
   }
 }
@@ -98,6 +100,13 @@ function runGame() {
     if (actions & ACTION_MUTE) {
       const muted = !world.audio.isMuted();
       world.audio.setMuted(muted);
+    }
+    // Tuning panel open: the world waits, the panel takes the keys. T, P or
+    // Esc closes it; the close button does the same with the mouse.
+    if (world.tuningOpen()) {
+      if (actions & (ACTION_TUNING | ACTION_PAUSE)) world.closeTuning();
+      world.render();
+      return;
     }
     const screen = world.screen();
     if (screen === SCREEN_TITLE) {

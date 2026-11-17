@@ -2,7 +2,7 @@
 // a short exchange between Kai Mercer (the wheelman), Marco Hale (the fixer
 // who hands out the jobs) and Rina Solano (the lookout who knows the streets).
 // Lines show as subtitles over the game and stay in a short HUD log, so the
-// five missions read as one continuing story instead of five dry objectives.
+// six missions read as one continuing story instead of six dry objectives.
 // All three names are original to this game.
 export const DIALOGUE = [
   {
@@ -60,10 +60,21 @@ export const DIALOGUE = [
       ['MARCO', 'Neon Bay is yours now, Kai. Drive it like you own it.'],
     ],
   },
+  {
+    intro: [
+      ['RINA', 'One more crate, Kai — Rustport Docks, container yard.'],
+      ['MARCO', 'The yard crew looks the other way. Bay PD does not.'],
+      ['KAI', 'Then I take the long way home, fast.'],
+    ],
+    complete: [
+      ['RINA', 'The yard never saw a thing. Neither did the cameras.'],
+      ['MARCO', 'Six jobs, Kai. You run this bay now.'],
+    ],
+  },
 ];
 
 export const DIALOGUE_FINALE = [
-  ['KAI', 'Five jobs. One city. Mine.'],
+  ['KAI', 'Six jobs. One city. Mine.'],
 ];
 
 export const DIALOGUE_FAIL = [

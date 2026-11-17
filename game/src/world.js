@@ -1,8 +1,10 @@
 // Neon Bay Heat — the world: it owns the renderer, the city, the traffic, the
 // pedestrians, the player, the police, the missions and the save, and steps them
 // together in fixed steps. main.js only drives the loop and the screens.
+// Marco's Garage tuning lives here too: the upgrade levels, the nitro charges,
+// and the panel that sells them, all saved with the run.
 import * as THREE from 'three';
-import { BEACH_X, BEST_KEY, CAR_RADIUS, CITY_HALF, GRID, MISSIONS, PALETTE, PITCH, PLACES, SAVE_KEY, STEP, TOKEN_REWARD, TOKEN_SPOTS, WANTED, clamp, distance2D, lerp } from './config.js';
+import { BEACH_X, BEST_KEY, CAR_RADIUS, CITY_HALF, GRID, MISSIONS, NITRO_MAX_CHARGES, NITRO_SECONDS, PALETTE, PITCH, PLACES, SAVE_KEY, STEP, TOKEN_REWARD, TOKEN_SPOTS, TUNING_PARTS, WANTED, clamp, distance2D, lerp } from './config.js';
 import { createRandom } from './random.js';
 import { buildCity, collideBuildings } from './city.js';
 import { collideCars, createTraffic, driveCar, makeCar, repaintCar, stepTraffic } from './vehicles.js';
@@ -17,7 +19,8 @@ import { createRace, raceMarker, raceObjective, raceReward, stepRace, RACE_FAILE
 import { createAudio } from './audio.js';
 import { createCamera } from './camera.js';
 import { createHud } from './hud.js';
-import { ACTION_ENTER, ACTION_GARAGE, ACTION_PAUSE, ACTION_PUNCH, ACTION_SHOOT } from './input.js';
+import { buyTuningPart, createTuningPanel, tuningSummary } from './tuning.js';
+import { ACTION_ENTER, ACTION_GARAGE, ACTION_NITRO, ACTION_PAUSE, ACTION_PUNCH, ACTION_SHOOT, ACTION_TUNING } from './input.js';
 
 export const SCREEN_TITLE = 'title';
 export const SCREEN_PLAY = 'play';
@@ -98,7 +101,53 @@ export function createWorld(canvas, seed) {
     skidTimer: 0,
     paintIndex: 0,
     garageCooldown: 0,
+    tune: { engine: 0, tires: 0, armor: 0, nitro: 0 },
+    nitroCharges: 0,
+    nitroTimer: 0,
+    tuningOpen: false,
   };
+
+  // Marco's Garage tuning panel: the world owns the money and the levels, the
+  // panel only renders them and forwards the buy.
+  function buyPart(partId) {
+    const result = buyTuningPart(state.tune, partId, state.cash, state.nitroCharges);
+    if (!result.ok) return result;
+    state.cash -= result.cost;
+    if (result.level !== undefined) {
+      state.tune[partId] = result.level;
+      if (partId === 'nitro') state.nitroCharges = Math.min(NITRO_MAX_CHARGES, state.nitroCharges + TUNING_PARTS.nitro[1].charges);
+      if (partId === 'armor') {
+        playerCar.maxHealth = TUNING_PARTS.armor[state.tune.armor].hp;
+        playerCar.health = playerCar.maxHealth;
+      }
+    }
+    if (result.refill) state.nitroCharges = Math.min(NITRO_MAX_CHARGES, state.nitroCharges + result.refill);
+    audio.pickup();
+    state.saveTimer = 0.5;
+    updateHud(); // the sim is paused while the panel is open, so refresh the HUD now
+    return result;
+  }
+
+  const tuningPanel = createTuningPanel(document, {
+    getState: () => ({ tune: state.tune, cash: state.cash, nitroCharges: state.nitroCharges }),
+    onBuy: (partId) => buyPart(partId),
+    onClose: () => closeTuning(),
+  });
+
+  function openTuning() {
+    if (state.tuningOpen) return;
+    state.tuningOpen = true;
+    tuningPanel.show();
+    audio.click();
+  }
+
+  function closeTuning() {
+    if (!state.tuningOpen) return;
+    state.tuningOpen = false;
+    tuningPanel.hide();
+    audio.click();
+    updateHud();
+  }
 
   function saveGame() {
     try {
@@ -107,6 +156,8 @@ export function createWorld(canvas, seed) {
         tokensTaken: state.tokensTaken,
         missionsDone: state.missionsDone,
         finished: missions.finished,
+        tune: state.tune,
+        nitroCharges: state.nitroCharges,
       }));
     } catch { /* storage off: the run still plays, it just does not persist */ }
   }
@@ -126,6 +177,18 @@ export function createWorld(canvas, seed) {
     state.cash = save.cash || 0;
     state.tokensTaken = TOKEN_SPOTS.map((_, i) => !!save.tokensTaken?.[i]);
     state.missionsDone = save.missionsDone || 0;
+    if (save.tune) {
+      state.tune = {
+        engine: save.tune.engine || 0,
+        tires: save.tune.tires || 0,
+        armor: save.tune.armor || 0,
+        nitro: save.tune.nitro || 0,
+      };
+      state.nitroCharges = save.nitroCharges || 0;
+      playerCar.tune = state.tune;
+      playerCar.maxHealth = TUNING_PARTS.armor[state.tune.armor].hp;
+      playerCar.health = playerCar.maxHealth;
+    }
     for (let i = 0; i < TOKEN_SPOTS.length; i += 1) {
       tokenMeshes[i].visible = !state.tokensTaken[i];
     }
@@ -144,8 +207,12 @@ export function createWorld(canvas, seed) {
     playerCar.z = 31;
     playerCar.heading = Math.PI;
     playerCar.speed = 0;
-    playerCar.health = 100;
+    playerCar.tune = state.tune;
+    playerCar.maxHealth = TUNING_PARTS.armor[state.tune.armor].hp;
+    playerCar.health = playerCar.maxHealth;
     playerCar.wrecked = false;
+    state.nitroTimer = 0;
+    state.nitroCharges = state.nitroCharges; // charges persist across a reset
     clearWanted(police);
     heli.active = false;
     heli.group.visible = false;
@@ -192,7 +259,9 @@ export function createWorld(canvas, seed) {
     playerCar.z = PLACES.safehouse.at[1] + 8;
     playerCar.heading = Math.PI;
     playerCar.speed = 0;
-    playerCar.health = 100;
+    playerCar.tune = state.tune;
+    playerCar.maxHealth = TUNING_PARTS.armor[state.tune.armor].hp;
+    playerCar.health = playerCar.maxHealth;
     playerCar.wrecked = false;
     clearWanted(police);
     if (!missions.finished) startMission(missions, missions.index);
@@ -292,6 +361,7 @@ export function createWorld(canvas, seed) {
     if (state.crashCooldown > 0) state.crashCooldown -= dt;
     if (state.garageCooldown > 0) state.garageCooldown -= dt;
     if (city.spireBeam) city.spireBeam.rotation.y += dt * 0.6;
+    if (city.portHook) city.portHook.rotation.z = Math.sin(state.elapsed * 0.5) * 0.06;
     if (state.saveTimer > 0) {
       state.saveTimer -= dt;
       if (state.saveTimer <= 0) saveGame();
@@ -318,6 +388,20 @@ export function createWorld(canvas, seed) {
       // The driver rides inside: keep the on-foot mesh hidden and glued to the car.
       player.mesh.visible = false;
       player.mesh.position.set(car.x, 0, car.z);
+      // The Vortex GT carries the garage tuning; a stolen car does not.
+      if (car.owned) car.tune = state.tune;
+      if (state.nitroTimer > 0) state.nitroTimer -= dt;
+      car.nitroTimer = state.nitroTimer;
+      // Nitro: one charge, a short violent boost, only with the kit installed.
+      if ((actions & ACTION_NITRO) && car.owned && state.tune.nitro > 0 && state.nitroCharges > 0 && state.nitroTimer <= 0) {
+        state.nitroCharges -= 1;
+        state.nitroTimer = NITRO_SECONDS;
+        car.nitroTimer = state.nitroTimer;
+        audio.pickup();
+        effects.exhaust(car.x - Math.sin(car.heading) * 2.4, car.z - Math.cos(car.heading) * 2.4);
+        hud.showBanner('NITRO!', `Boost burning — ${state.nitroCharges} charge${state.nitroCharges === 1 ? '' : 's'} left.`, 1.6);
+        state.saveTimer = 0.5;
+      }
       driveCar(car, drive, dt, city.colliders, (impact) => {
         if (state.crashCooldown <= 0) {
           audio.crash();
@@ -527,21 +611,23 @@ export function createWorld(canvas, seed) {
     }
 
     // Marco's Garage: press G in a car here to repaint it for $50, cycling
-    // hot pink, lagoon teal and sun gold.
-    if ((actions & ACTION_GARAGE) && inCar && state.garageCooldown <= 0
-      && distance2D(player.x, player.z, PLACES.garage.at[0], PLACES.garage.at[1]) < 10) {
-      if (state.cash >= 50) {
-        state.cash -= 50;
-        state.paintIndex = (state.paintIndex + 1) % PAINT_JOBS.length;
-        const job = PAINT_JOBS[state.paintIndex];
-        repaintCar(player.inCar, job.color);
-        audio.pickup();
-        hud.showBanner('FRESH PAINT', `${job.name} — $50 at Marco's Garage.`, 2.5);
-        state.saveTimer = 0.5;
-      } else {
-        hud.showBanner('NO CASH', 'A repaint costs $50 — go earn it first.', 2);
+    // hot pink, lagoon teal and sun gold. Press T to open the tuning menu.
+    if (inCar && distance2D(player.x, player.z, PLACES.garage.at[0], PLACES.garage.at[1]) < 12) {
+      if ((actions & ACTION_TUNING) && !state.tuningOpen) openTuning();
+      if ((actions & ACTION_GARAGE) && state.garageCooldown <= 0) {
+        if (state.cash >= 50) {
+          state.cash -= 50;
+          state.paintIndex = (state.paintIndex + 1) % PAINT_JOBS.length;
+          const job = PAINT_JOBS[state.paintIndex];
+          repaintCar(player.inCar, job.color);
+          audio.pickup();
+          hud.showBanner('FRESH PAINT', `${job.name} — $50 at Marco's Garage.`, 2.5);
+          state.saveTimer = 0.5;
+        } else {
+          hud.showBanner('NO CASH', 'A repaint costs $50 — go earn it first.', 2);
+        }
+        state.garageCooldown = 1;
       }
-      state.garageCooldown = 1;
     }
 
     // Spray & Shade: drive in with heat to clear it for $100.
@@ -576,14 +662,16 @@ export function createWorld(canvas, seed) {
     if (police.wanted > 0 && player.inCar) hint += ' • Spray & Shade clears heat ($100)';
     if (police.wanted >= 3) hint += ' • BAY PD HELICOPTER overhead!';
     if (player.inCar && distance2D(player.x, player.z, PLACES.garage.at[0], PLACES.garage.at[1]) < 12) {
-      hint += ` • G repaint $50 (next: ${PAINT_JOBS[(state.paintIndex + 1) % PAINT_JOBS.length].name})`;
+      hint += ` • G repaint $50 (next: ${PAINT_JOBS[(state.paintIndex + 1) % PAINT_JOBS.length].name}) • T tuning`;
     }
+    if (state.tune.nitro > 0 && player.inCar) hint += ` • N nitro (${state.nitroCharges} left)`;
     if (race.active) hint = 'STREET RACE — follow the orange gate on the minimap!';
     const raceOn = race.active;
     hud.update({
       cash: state.cash,
       health: Math.round(player.health),
       wanted: police.wanted,
+      tuneText: tuningSummary(state.tune, state.nitroCharges),
       missionTitle: raceOn ? 'STREET RACE — MIDNIGHT APEX' : missionTitle(missions),
       missionText: raceOn ? raceObjective(race) : missionObjective(missions),
       missionDist: marker ? `${Math.round(distance2D(player.x, player.z, marker.x, marker.z))}m` : '',
@@ -609,6 +697,7 @@ export function createWorld(canvas, seed) {
   function stepAmbient(dt, focus = { x: 0, y: 0, z: 62 }) {
     state.elapsed += dt;
     if (city.spireBeam) city.spireBeam.rotation.y += dt * 0.6;
+    if (city.portHook) city.portHook.rotation.z = Math.sin(state.elapsed * 0.5) * 0.06;
     stepTraffic(traffic, dt, city.colliders, null, random);
     stepPedestrians(peds, dt, city.colliders, { x: 9999, z: 9999, danger: false }, random);
     effects.step(dt);
@@ -641,6 +730,11 @@ export function createWorld(canvas, seed) {
     traffic,
     peds,
     cam,
+    tuningPanel,
+    buyPart,
+    openTuning,
+    closeTuning,
+    tuningOpen: () => state.tuningOpen,
     screen: () => state.screen,
     setScreen(s) {
       state.screen = s;

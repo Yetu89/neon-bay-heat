@@ -17,6 +17,7 @@
   #hud-health-fill { height: 100%; width: 100%; background: #2ec4b6; border-radius: 5px; transition: width 0.2s; }
   #hud-stars { font-size: 22px; letter-spacing: 3px; color: #8b93a3; margin-top: 4px; }
   #hud-stars.hot { color: #ffd166; text-shadow: 0 0 12px rgba(255, 60, 60, 0.9); }
+  #hud-tune { font-size: 12.5px; font-weight: 700; letter-spacing: 1px; color: #00f5d4; margin-top: 5px; }
   #hud-mission { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); padding: 10px 18px; text-align: center; max-width: 46vw; }
   #hud-mission-title { font-size: 15px; font-weight: 800; letter-spacing: 2px; color: #fee440; }
   #hud-mission-text { font-size: 15px; margin-top: 2px; }
@@ -52,16 +53,30 @@
   .big.red { color: #ff4d6d; text-shadow: 0 0 24px rgba(255, 40, 60, 0.8); }
   .big.gold { color: #fee440; text-shadow: 0 0 24px rgba(254, 228, 64, 0.7); }
   #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* ---------- Tuning panel (side menu, game stays visible behind it) ---------- */
+  #screen-tuning { position: fixed; top: 50%; right: 18px; transform: translateY(-50%); z-index: 9; width: 360px; color: #fff; pointer-events: auto; }
+  #screen-tuning .tune-panel { padding: 16px 18px; text-align: left; }
+  #tune-title { font-size: 17px; font-weight: 900; letter-spacing: 2px; color: #fee440; }
+  #tune-cash { font-size: 14px; font-weight: 800; color: #7dfcd6; margin-top: 4px; }
+  .tune-row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  .tune-label { width: 62px; font-size: 12px; font-weight: 800; letter-spacing: 1px; color: #ff9ecf; }
+  .tune-info { flex: 1; font-size: 13px; color: #e8e4f5; line-height: 1.3; }
+  .btn.tune-buy { margin: 0; padding: 8px 10px; font-size: 12.5px; white-space: nowrap; }
+  .btn.tune-buy:disabled { opacity: 0.45; cursor: default; }
+  #tune-msg { font-size: 12.5px; color: #ffd166; margin-top: 12px; line-height: 1.4; min-height: 18px; }
+  #tune-hint { font-size: 12px; color: #c9c2dd; margin-top: 6px; }
+  #btn-tune-close { width: 100%; margin: 12px 0 0; padding: 10px; font-size: 14px; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Neon Bay Heat: an open-world crime game. Drive, steal cars, dodge Bay PD and run three missions."></canvas>
+<canvas id="game" aria-label="Neon Bay Heat: an open-world crime game. Drive, steal cars, dodge Bay PD and run six missions."></canvas>
 
 <div id="hud" class="hidden">
   <div id="hud-top-left" class="panel">
     <div id="hud-cash">$0</div>
     <div id="hud-health"><div id="hud-health-fill"></div></div>
     <div id="hud-stars">☆☆☆☆☆</div>
+    <div id="hud-tune"></div>
   </div>
   <div id="hud-mission" class="panel">
     <div id="hud-mission-title">NEON BAY HEAT</div>
@@ -83,17 +98,29 @@
   </div>
 </div>
 
+<div id="screen-tuning" class="hidden">
+  <div class="panel tune-panel">
+    <div id="tune-title">MARCO'S GARAGE — TUNING</div>
+    <div id="tune-cash"></div>
+    <div id="tune-rows"></div>
+    <div id="tune-msg"></div>
+    <div id="tune-hint">1–4 buy a part • N burns nitro while driving • T close</div>
+    <button id="btn-tune-close" class="btn">CLOSE [T]</button>
+  </div>
+</div>
+
 <div id="screen-title" class="screen">
   <div class="card">
     <div class="game-title">NEON BAY<br>HEAT</div>
     <div class="game-sub">An open-world crime game — a sun-soaked city of your own.</div>
     <p class="story">Kai Mercer is new in Neon Bay, and broke. Marco Hale needs a wheelman who asks
       no questions: steal a car, run a hot delivery, then lose Bay PD at three stars and vanish.
-      Five missions, a street race, traffic, pedestrians, police — the whole city is yours to take.</p>
+      Six missions, a street race, garage tuning, traffic, pedestrians, police — the whole city is yours to take.</p>
     <div class="controls">
       <b>WASD</b> move / drive &nbsp;•&nbsp; <b>Mouse drag</b> camera &nbsp;•&nbsp; <b>Wheel</b> zoom<br>
       <b>E</b> steal / enter car &nbsp;•&nbsp; <b>SPACE</b> handbrake &nbsp;•&nbsp; <b>F</b> punch &nbsp;•&nbsp; <b>Click</b> shoot<br>
-      <b>SHIFT</b> run &nbsp;•&nbsp; <b>G</b> repaint at Marco's Garage ($50) &nbsp;•&nbsp; <b>P</b> pause &nbsp;•&nbsp; <b>M</b> mute &nbsp;•&nbsp; <b>ENTER</b> start
+      <b>SHIFT</b> run &nbsp;•&nbsp; <b>G</b> repaint at Marco's Garage ($50) &nbsp;•&nbsp; <b>T</b> tuning at the garage &nbsp;•&nbsp; <b>N</b> nitro<br>
+      <b>P</b> pause &nbsp;•&nbsp; <b>M</b> mute &nbsp;•&nbsp; <b>ENTER</b> start
     </div>
     <div id="title-stats"></div>
     <button id="btn-continue" class="btn hidden">CONTINUE</button>
@@ -130,7 +157,7 @@
 <div id="screen-complete" class="screen hidden">
   <div class="card">
     <div class="big gold">STORY COMPLETE</div>
-    <p class="story">Five jobs, one wheelman, zero witnesses who stayed to talk. Neon Bay is yours —
+    <p class="story">Six jobs, one wheelman, zero witnesses who stayed to talk. Neon Bay is yours —
       cruise it, collect the ten neon tokens, and keep the heat off your tail.</p>
     <button id="btn-continue-roam" class="btn">FREE ROAM</button>
   </div>

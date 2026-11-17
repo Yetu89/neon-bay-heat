@@ -1,12 +1,13 @@
 // Neon Bay Heat — the HUD: DOM panels over the 3D view (cash, health, wanted stars,
 // mission banner, speed, hints) and the minimap canvas drawn from the live world.
-import { BEACH_X, CITY_HALF, PLACES, SEA_X, TOKEN_SPOTS, clamp } from './config.js';
+import { BEACH_X, CITY_HALF, PLACES, PORT_EDGE, SEA_X, TOKEN_SPOTS, clamp } from './config.js';
 
 export function createHud(document) {
   const el = (id) => document.getElementById(id);
   const cash = el('hud-cash');
   const healthFill = el('hud-health-fill');
   const stars = el('hud-stars');
+  const tuneLine = el('hud-tune');
   const missionTitle = el('hud-mission-title');
   const missionText = el('hud-mission-text');
   const missionDist = el('hud-mission-dist');
@@ -38,6 +39,9 @@ export function createHud(document) {
     const toPx = (v) => ((v + span / 2) / span) * size;
     mapCtx.fillStyle = '#14101f';
     mapCtx.fillRect(0, 0, size, size);
+    // Rustport Docks apron on the west edge, darker than the city.
+    mapCtx.fillStyle = '#2e2e38';
+    mapCtx.fillRect(0, 0, toPx(PORT_EDGE), size);
     // Sea and beach on the east.
     mapCtx.fillStyle = '#1d5f7a';
     mapCtx.fillRect(toPx(SEA_X), 0, size - toPx(SEA_X), size);
@@ -81,11 +85,27 @@ export function createHud(document) {
       mapCtx.closePath();
       mapCtx.fill();
     }
-    // Safehouse and spray shop.
+    // Safehouse, spray shop and Marco's Garage.
     mapCtx.fillStyle = '#2ec4b6';
     mapCtx.fillRect(toPx(PLACES.safehouse.at[0]) - 3, toPx(PLACES.safehouse.at[1]) - 3, 6, 6);
     mapCtx.fillStyle = '#9b5de5';
     mapCtx.fillRect(toPx(PLACES.spray.at[0]) - 3, toPx(PLACES.spray.at[1]) - 3, 6, 6);
+    mapCtx.fillStyle = '#ff2e88';
+    mapCtx.fillRect(toPx(PLACES.garage.at[0]) - 3, toPx(PLACES.garage.at[1]) - 3, 6, 6);
+    // Rustport Docks: the yard marker and the two gantry cranes.
+    mapCtx.fillStyle = '#f5c518';
+    mapCtx.fillRect(toPx(PLACES.rustport.at[0]) - 3, toPx(PLACES.rustport.at[1]) - 3, 6, 6);
+    for (const crane of [PLACES.craneNorth, PLACES.craneSouth]) {
+      const cx = toPx(crane.at[0]);
+      const cy = toPx(crane.at[1]);
+      mapCtx.fillStyle = '#ff8e63';
+      mapCtx.beginPath();
+      mapCtx.moveTo(cx, cy - 5);
+      mapCtx.lineTo(cx + 5, cy + 4);
+      mapCtx.lineTo(cx - 5, cy + 4);
+      mapCtx.closePath();
+      mapCtx.fill();
+    }
     // Neon Spire landmark: a gold star on the beachfront.
     mapCtx.fillStyle = '#fee440';
     const sx = toPx(PLACES.spire.at[0]);
@@ -153,6 +173,7 @@ export function createHud(document) {
         stars.classList.toggle('hot', world.wanted > 0);
         lastStars = world.wanted;
       }
+      if (tuneLine && world.tuneText) tuneLine.textContent = world.tuneText;
       missionTitle.textContent = world.missionTitle;
       missionText.textContent = world.missionText;
       missionDist.textContent = world.missionDist;

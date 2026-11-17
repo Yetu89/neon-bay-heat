@@ -1,7 +1,10 @@
 // Neon Bay Heat — cars: the factory that builds a low-poly car from boxes, the
 // arcade driving model for the player's car, and the traffic that cruises the grid.
+// The player's car reads its garage tuning (engine, tires, nitro) from car.tune:
+// a Race Built engine is faster, Track Slicks turn sharper, and a live nitro
+// timer lifts the top speed while it burns.
 import * as THREE from 'three';
-import { CAR_ACCEL, CAR_BRAKE, CAR_MAX_REVERSE, CAR_MAX_SPEED, CAR_RADIUS, CAR_TURN, CITY_HALF, GRID, PALETTE, PITCH, ROAD, angleDelta, clamp, nearestRoadCoord } from './config.js';
+import { CAR_ACCEL, CAR_BRAKE, CAR_MAX_REVERSE, CAR_MAX_SPEED, CAR_RADIUS, CAR_TURN, CITY_HALF, GRID, PALETTE, PITCH, ROAD, TUNING_PARTS, angleDelta, clamp, nearestRoadCoord } from './config.js';
 import { collideBuildings } from './city.js';
 
 const wheelGeo = new THREE.CylinderGeometry(0.42, 0.42, 0.34, 10);
@@ -170,9 +173,12 @@ export function makeCar(x, z, heading, color, police = false, type = 'sedan') {
     speed: 0,
     steer: 0,
     health: 100,
+    maxHealth: 100,
     police,
     type,
     bumpCooldown: 0,
+    tune: null, // garage tuning {engine, tires, armor, nitro} — the player's car only
+    nitroTimer: 0, // seconds of boost left when a nitro charge is burning
     // Traffic state: which road axis it follows and where it turns next.
     axis: 'x',
     dir: 1,
@@ -183,22 +189,32 @@ export function makeCar(x, z, heading, color, police = false, type = 'sedan') {
 }
 
 // Arcade driving: throttle, brake/reverse, speed-scaled steering, drag and drift.
+// Tuning scales the numbers: a tuned engine accelerates harder and tops out
+// higher, grippier tires turn sharper, and a burning nitro charge lifts the cap.
 export function driveCar(car, input, dt, colliders, onCrash) {
   if (car.bumpCooldown > 0) car.bumpCooldown -= dt;
+  const tune = car.tune || {};
+  const engine = TUNING_PARTS.engine[tune.engine || 0] || TUNING_PARTS.engine[0];
+  const tires = TUNING_PARTS.tires[tune.tires || 0] || TUNING_PARTS.tires[0];
+  const nitroBurning = (car.nitroTimer || 0) > 0;
+  if (nitroBurning) car.nitroTimer -= dt;
+  const accel = CAR_ACCEL * engine.accel * (nitroBurning ? 1.6 : 1);
+  const maxSpeed = CAR_MAX_SPEED * engine.max * (nitroBurning ? 1.45 : 1);
+  const turn = CAR_TURN * tires.turn;
   const forward = input.throttle;
-  if (forward > 0) car.speed += CAR_ACCEL * forward * dt;
+  if (forward > 0) car.speed += accel * forward * dt;
   else if (forward < 0) {
     if (car.speed > 0.5) car.speed -= CAR_BRAKE * dt; // brake first
-    else car.speed -= CAR_ACCEL * 0.55 * dt; // then reverse
+    else car.speed -= accel * 0.55 * dt; // then reverse
   }
   if (input.brake) car.speed -= (car.speed > 0 ? CAR_BRAKE : -CAR_BRAKE * 0.4) * dt * 0.6;
   car.speed -= car.speed * 0.35 * dt; // rolling drag
   if (input.brake && Math.abs(car.speed) > 6) car.speed -= car.speed * 0.9 * dt; // handbrake slide
-  car.speed = clamp(car.speed, -CAR_MAX_REVERSE, CAR_MAX_SPEED);
-  const speed01 = Math.abs(car.speed) / CAR_MAX_SPEED;
+  car.speed = clamp(car.speed, -CAR_MAX_REVERSE, maxSpeed);
+  const speed01 = Math.abs(car.speed) / maxSpeed;
   const steerTarget = input.steer * (input.brake ? 1.5 : 1);
   car.steer += (steerTarget - car.steer) * Math.min(1, dt * 8);
-  car.heading += car.steer * CAR_TURN * clamp(speed01 * 1.6, 0, 1) * Math.sign(car.speed || 1) * dt * (input.brake ? 1.25 : 1);
+  car.heading += car.steer * turn * clamp(speed01 * 1.6, 0, 1) * Math.sign(car.speed || 1) * dt * (input.brake ? 1.25 : 1);
   const nx = car.x + Math.sin(car.heading) * car.speed * dt;
   const nz = car.z + Math.cos(car.heading) * car.speed * dt;
   const pos = { x: nx, z: nz };
@@ -207,7 +223,8 @@ export function driveCar(car, input, dt, colliders, onCrash) {
     if (Math.abs(car.speed) > 8 && onCrash) onCrash(Math.abs(car.speed));
     car.speed *= 0.45;
   }
-  car.x = clamp(pos.x, -CITY_HALF - 40, 320);
+  // The west clamp reaches past the grid edge into Rustport Docks.
+  car.x = clamp(pos.x, -CITY_HALF - 140, 320);
   car.z = clamp(pos.z, -CITY_HALF - 10, CITY_HALF + 10);
   car.mesh.position.set(car.x, 0, car.z);
   car.mesh.rotation.y = car.heading;

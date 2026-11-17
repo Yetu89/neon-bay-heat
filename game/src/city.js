@@ -1,9 +1,10 @@
 // Neon Bay Heat — the city itself: ground, sky, sun, buildings, palms, street
 // lights, the beach and the sea, plus the collision boxes and the spawn points the
 // other systems use. Everything is placed from the seeded random, so one seed is one
-// city.
+// city. West of the grid sits Rustport Docks, the night-shift industrial port:
+// container stacks, gantry cranes, warehouses and a cargo ship at the far quay.
 import * as THREE from 'three';
-import { BEACH_X, BLOCK, CITY_HALF, GRID, PALETTE, PITCH, ROAD, SEA_X } from './config.js';
+import { BEACH_X, BLOCK, CITY_HALF, GRID, PALETTE, PITCH, PORT_EDGE, PORT_X, ROAD, SEA_X } from './config.js';
 import { createFacadeTexture, createGroundTexture, createSkyTexture } from './textures.js';
 
 const PALM_POSITIONS = [];
@@ -356,12 +357,220 @@ export function buildCity(scene, random) {
     plantPalms(group, random, -62 - 11, a * PITCH, 1);
   }
 
+  // Rustport Docks: the night-shift industrial port west of the grid.
+  const portHook = buildRustport(group, random, colliders);
+
   // Parked cars along the beach boulevard and a few side streets.
   for (let i = 0; i < 10; i += 1) {
     PARKED_SPOTS.push([random.pick([-186, -124, -62, 0, 62, 124]) + random.range(-4, 4), random.pick([-186, -124, -62, 0, 62, 124]) + random.range(-4, 4)]);
   }
 
-  return { colliders, group, parkedSpots: PARKED_SPOTS, spireBeam };
+  return { colliders, group, parkedSpots: PARKED_SPOTS, spireBeam, portHook };
+}
+
+// Rustport Docks — container yard, gantry cranes, warehouses and a cargo ship.
+// The apron is a dark asphalt plane west of the grid, lit by floodlights, so the
+// port reads as a different place at a glance: industrial, night-shift, neon signs
+// instead of pastel towers. Mission 6's pickup sits in a clear lane at (-248, 60).
+function buildRustport(group, random, colliders) {
+  const steelMat = new THREE.MeshStandardMaterial({ color: 0x4a4a55, roughness: 0.7, metalness: 0.4 });
+  const darkSteelMat = new THREE.MeshStandardMaterial({ color: 0x2b2b33, roughness: 0.7, metalness: 0.5 });
+  const apronMat = new THREE.MeshStandardMaterial({ color: 0x3a3a44, roughness: 1 });
+
+  // The apron: dark asphalt from the grid edge out past the quay, so the port
+  // has ground under it beyond the city ground plane.
+  const apron = new THREE.Mesh(new THREE.PlaneGeometry(152, 400), apronMat);
+  apron.rotation.x = -Math.PI / 2;
+  apron.position.set(PORT_X, 0.04, 0);
+  apron.receiveShadow = true;
+  group.add(apron);
+  // Yellow lane paint on the apron, marking the truck lanes through the yard.
+  const laneMat = new THREE.MeshStandardMaterial({ color: 0xf5d76e, roughness: 0.9 });
+  for (const lz of [-120, -40, 40, 120]) {
+    const lane = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 56), laneMat);
+    lane.rotation.x = -Math.PI / 2;
+    lane.position.set(-232, 0.06, lz);
+    group.add(lane);
+  }
+
+  // Container stacks: bright steel boxes, 1–3 high, some turned sideways.
+  // The pickup lane around (-248, 60) stays clear.
+  const containerColors = [0xd62828, 0x2266aa, 0x2a9d8f, 0xe9c46a, 0x9b5de5, 0xf4a261];
+  const stackSpots = [
+    [-292, -150], [-268, -150], [-292, -110], [-262, -110], [-292, -70], [-268, -70],
+    [-292, -30], [-262, -30], [-292, 10], [-268, 10], [-292, 110], [-268, 110],
+    [-292, 150], [-268, 150], [-232, -150], [-232, -110], [-232, -70], [-232, 150],
+    [-292, -170], [-262, 170], [-232, 30],
+  ];
+  for (const [sx, sz] of stackSpots) {
+    if (Math.hypot(sx + 248, sz - 60) < 16) continue; // keep the pickup lane clear
+    const sideways = random.chance(0.35);
+    const levels = random.int(1, 3);
+    const color = containerColors[random.int(0, containerColors.length - 1)];
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.35 });
+    const ribMat = new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.7 });
+    for (let lv = 0; lv < levels; lv += 1) {
+      const box = new THREE.Mesh(new THREE.BoxGeometry(sideways ? 2.7 : 6.2, 2.6, sideways ? 6.2 : 2.7), mat);
+      box.position.set(sx, 1.3 + lv * 2.6, sz);
+      box.castShadow = true;
+      box.receiveShadow = true;
+      group.add(box);
+      // A dark rib across the top so a stack reads as containers, not a wall.
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(sideways ? 2.75 : 6.25, 0.18, sideways ? 6.25 : 2.75), ribMat);
+      rib.position.set(sx, 2.55 + lv * 2.6, sz);
+      group.add(rib);
+    }
+    colliders.push({ x: sx, z: sz, hw: sideways ? 1.5 : 3.2, hd: sideways ? 3.2 : 1.5 });
+  }
+
+  // Warehouses along the far quay, with glowing signs on their east faces.
+  const warehouseSpots = [[-312, -120, 'RUSTPORT'], [-312, 0, 'CARGO 7'], [-312, 120, 'DOCK 9']];
+  const signColors = [0xff2e88, 0x00f5d4, 0xfee440];
+  for (let w = 0; w < warehouseSpots.length; w += 1) {
+    const [wx, wz] = warehouseSpots[w];
+    const shed = new THREE.Mesh(new THREE.BoxGeometry(22, 10, 30), steelMat);
+    shed.position.set(wx, 5, wz);
+    shed.castShadow = true;
+    shed.receiveShadow = true;
+    group.add(shed);
+    const shedRoof = new THREE.Mesh(new THREE.BoxGeometry(23, 1, 31), darkSteelMat);
+    shedRoof.position.set(wx, 10.5, wz);
+    group.add(shedRoof);
+    const sign = new THREE.Mesh(
+      new THREE.BoxGeometry(15, 2.4, 0.4),
+      new THREE.MeshBasicMaterial({ color: signColors[w % signColors.length] }),
+    );
+    sign.position.set(wx + 11.2, 8, wz);
+    group.add(sign);
+    // Roller doors on the east face, facing the yard.
+    for (const dz of [-8, 0, 8]) {
+      const door = new THREE.Mesh(new THREE.BoxGeometry(0.3, 5, 5), darkSteelMat);
+      door.position.set(wx + 11.1, 2.5, wz + dz);
+      group.add(door);
+    }
+    colliders.push({ x: wx, z: wz, hw: 11, hd: 15 });
+  }
+
+  // Two gantry cranes over the truck lanes: four legs, a top beam, a trolley
+  // and a hook hanging on a cable. Crane 7's hook sways gently over time.
+  let portHook = null;
+  const craneSpots = [[-215, -60, 'CRANE 7'], [-215, 90, 'CRANE 9']];
+  for (let c = 0; c < craneSpots.length; c += 1) {
+    const [cx, cz, label] = craneSpots[c];
+    const crane = new THREE.Group();
+    for (const [lx, lz] of [[-7, -5], [7, -5], [-7, 5], [7, 5]]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(1.2, 26, 1.2), darkSteelMat);
+      leg.position.set(lx, 13, lz);
+      leg.castShadow = true;
+      crane.add(leg);
+    }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(2, 2.2, 34), steelMat);
+    beam.position.set(0, 27, 0);
+    beam.castShadow = true;
+    crane.add(beam);
+    const beamSign = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 1.8, 12),
+      new THREE.MeshBasicMaterial({ color: c === 0 ? 0xfee440 : 0x00f5d4 }),
+    );
+    beamSign.position.set(1.3, 27, 0);
+    crane.add(beamSign);
+    // Trolley and hook: a cable drops from the beam, a container hangs on it.
+    const trolley = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.2, 2.4), darkSteelMat);
+    trolley.position.set(0, 25.4, 2);
+    crane.add(trolley);
+    const hookGroup = new THREE.Group();
+    hookGroup.position.set(0, 25, 2);
+    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 15, 5), darkSteelMat);
+    cable.position.y = -7.5;
+    hookGroup.add(cable);
+    const hookBox = new THREE.Mesh(
+      new THREE.BoxGeometry(3, 2.4, 2.4),
+      new THREE.MeshStandardMaterial({ color: containerColors[c * 2 + 1], roughness: 0.6, metalness: 0.35 }),
+    );
+    hookBox.position.y = -16;
+    hookBox.castShadow = true;
+    hookGroup.add(hookBox);
+    crane.add(hookGroup);
+    if (c === 0) portHook = hookGroup;
+    crane.position.set(cx, 0, cz);
+    group.add(crane);
+    colliders.push({ x: cx - 7, z: cz, hw: 1.2, hd: 6 });
+    colliders.push({ x: cx + 7, z: cz, hw: 1.2, hd: 6 });
+  }
+
+  // A cargo ship at the far quay, beyond the driveable apron: hull, deck
+  // containers and a funnel, so the port ends on water, not on a void.
+  const ship = new THREE.Group();
+  const hull = new THREE.Mesh(new THREE.BoxGeometry(24, 7, 74), new THREE.MeshStandardMaterial({ color: 0x1d3557, roughness: 0.6, metalness: 0.4 }));
+  hull.position.y = 3.5;
+  hull.castShadow = true;
+  ship.add(hull);
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(22, 1, 70), darkSteelMat);
+  deck.position.y = 7.5;
+  ship.add(deck);
+  for (let s = 0; s < 8; s += 1) {
+    const deckBox = new THREE.Mesh(
+      new THREE.BoxGeometry(5, 2.4, 5),
+      new THREE.MeshStandardMaterial({ color: containerColors[s % containerColors.length], roughness: 0.6, metalness: 0.35 }),
+    );
+    deckBox.position.set(s % 2 ? 5.5 : -5.5, 9.2, -28 + s * 8);
+    ship.add(deckBox);
+  }
+  const funnel = new THREE.Mesh(new THREE.BoxGeometry(6, 8, 4), new THREE.MeshStandardMaterial({ color: 0xe9c46a, roughness: 0.6 }));
+  funnel.position.set(0, 12, -32);
+  ship.add(funnel);
+  ship.position.set(-362, 0, 0);
+  group.add(ship);
+
+  // Floodlight poles over the yard, with two real point lights so the port
+  // glows amber against the sunset city.
+  const floodPoleMat = new THREE.MeshStandardMaterial({ color: 0x22222a, roughness: 0.6, metalness: 0.6 });
+  for (const [fx, fz] of [[-200, -120], [-200, 120], [-326, -120], [-326, 120], [-200, 0], [-326, 0]]) {
+    const fPole = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 12, 6), floodPoleMat);
+    fPole.position.set(fx, 6, fz);
+    group.add(fPole);
+    const fLamp = new THREE.Mesh(new THREE.SphereGeometry(0.6, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe9a8 }));
+    fLamp.position.set(fx, 12.2, fz);
+    group.add(fLamp);
+  }
+  for (const [lx, lz] of [[-215, -60], [-215, 90]]) {
+    const light = new THREE.PointLight(0xffd9a0, 500, 130, 1.8);
+    light.position.set(lx, 20, lz);
+    group.add(light);
+  }
+
+  // Barrels, crates and a forklift: small props so the yard floor is not bare.
+  const barrelColors = [0x8a5a3b, 0x2266aa, 0x2a9d8f];
+  for (let b = 0; b < 12; b += 1) {
+    const bx = -240 + random.range(-30, 30);
+    const bz = -160 + b * 28 + random.range(-6, 6);
+    if (Math.hypot(bx + 248, bz - 60) < 14) continue;
+    const barrel = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.6, 0.6, 1.1, 8),
+      new THREE.MeshStandardMaterial({ color: barrelColors[b % barrelColors.length], roughness: 0.8, metalness: 0.3 }),
+    );
+    barrel.position.set(bx, 0.55, bz);
+    barrel.castShadow = true;
+    group.add(barrel);
+  }
+  const forklift = new THREE.Group();
+  const forkBody = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.1, 2.6), new THREE.MeshStandardMaterial({ color: 0xf5c518, roughness: 0.5, metalness: 0.3 }));
+  forkBody.position.y = 0.8;
+  forkBody.castShadow = true;
+  forklift.add(forkBody);
+  const mast = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.2, 0.15), darkSteelMat);
+  mast.position.set(0, 1.6, 1.4);
+  forklift.add(mast);
+  for (const side of [-1, 1]) {
+    const fork = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.08, 1.2), darkSteelMat);
+    fork.position.set(side * 0.5, 0.15, 1.9);
+    forklift.add(fork);
+  }
+  forklift.position.set(-238, 0, 28);
+  forklift.rotation.y = Math.PI / 4;
+  group.add(forklift);
+
+  return portHook;
 }
 
 function addBush(group, x, z) {

@@ -11,6 +11,8 @@ export const GRID = 3; // roads at -GRID..GRID * PITCH on each axis
 export const CITY_HALF = GRID * PITCH + ROAD / 2; // ~193, edge of the outermost road
 export const BEACH_X = 214; // where the sand starts
 export const SEA_X = 252; // where the water starts
+export const PORT_X = -268; // centre of the Rustport Docks apron, west of the grid
+export const PORT_EDGE = -193; // where the city grid ends and the port begins
 
 // Sun-soaked Neon Bay: warm sunset sky, pastel towers, neon signs.
 export const PALETTE = {
@@ -59,7 +61,43 @@ export const WANTED = [
 ];
 export const WANTED_DECAY_SECONDS = 12; // quiet time before one star drops
 
-// The story: five missions in order. Each step is one objective with a marker.
+// Marco's Garage tuning: real upgrades for the Vortex GT, bought with mission
+// cash. Engine raises acceleration and top speed, tires sharpen the steering,
+// armor raises the car's health, and the nitro kit gives boost charges (N while
+// driving). Levels are one-way: each part climbs its ladder, never back down.
+export const TUNING_PARTS = {
+  engine: [
+    { name: 'Stock Engine', cost: 0, accel: 1, max: 1 },
+    { name: 'Street Tuned', cost: 800, accel: 1.18, max: 1.12 },
+    { name: 'Race Built', cost: 2200, accel: 1.35, max: 1.25 },
+  ],
+  tires: [
+    { name: 'Street Tires', cost: 0, turn: 1 },
+    { name: 'Sport Grip', cost: 600, turn: 1.25 },
+    { name: 'Track Slicks', cost: 1600, turn: 1.5 },
+  ],
+  armor: [
+    { name: 'Stock Body', cost: 0, hp: 100 },
+    { name: 'Reinforced', cost: 700, hp: 160 },
+    { name: 'Armored', cost: 1800, hp: 240 },
+  ],
+  nitro: [
+    { name: 'No Nitro', cost: 0, charges: 0 },
+    { name: 'Nitro Kit', cost: 900, charges: 3 },
+  ],
+};
+export const TUNING_LABELS = {
+  engine: 'ENGINE',
+  tires: 'TIRES',
+  armor: 'ARMOR',
+  nitro: 'NITRO',
+};
+export const NITRO_REFILL_COST = 150;
+export const NITRO_REFILL_CHARGES = 3;
+export const NITRO_MAX_CHARGES = 6;
+export const NITRO_SECONDS = 2.5;
+
+// The story: six missions in order. Each step is one objective with a marker.
 export const MISSIONS = [
   {
     id: 'first-gear',
@@ -112,6 +150,17 @@ export const MISSIONS = [
       { id: 'vanish', text: 'Lose the heat, then reach the Bayfront Safehouse', kind: 'escape', at: [186, 186], radius: 11 },
     ],
   },
+  {
+    id: 'rustport-run',
+    title: 'MISSION 6 — RUSTPORT RUN',
+    intro: 'A container of hot goods is sitting at Rustport Docks. Rina says the yard crew looks the other way — for a price.',
+    reward: 3000,
+    steps: [
+      { id: 'pickup', text: 'Pick up the goods at the Rustport container yard', kind: 'goto', at: [-248, 60], radius: 10 },
+      { id: 'deliver', text: "Get the goods to Marco's Garage — 120 seconds!", kind: 'goto', at: [124, -124], radius: 10, time: 120, wantedOnStart: 2 },
+      { id: 'vanish', text: 'Lose the heat, then reach the Bayfront Safehouse', kind: 'escape', at: [186, 186], radius: 11 },
+    ],
+  },
 ];
 
 // The Midnight Apex street race: a repeatable side activity. Drive through gate 1
@@ -135,6 +184,9 @@ export const PLACES = {
   beach: { name: 'Flamingo Beach', at: [228, 0] },
   spire: { name: 'Neon Spire', at: [240, -120] }, // beachfront landmark lighthouse
   boardwalk: { name: 'Boardwalk', at: [222, -60] },
+  rustport: { name: 'Rustport Docks', at: [-248, 60] }, // industrial port district, west edge
+  craneNorth: { name: 'Crane 7', at: [-215, -60] },
+  craneSouth: { name: 'Crane 9', at: [-215, 90] },
 };
 
 // Ten glowing neon tokens hidden around the city: +$100 each, saved when collected.

@@ -106,11 +106,11 @@ export function stageShot(name, world) {
     world.cam.zoom(-150);
     world.cam.drag(-40, 60);
     world.cam.update(1, { x: world.player.x, y: 0, z: world.player.z }, world.player.heading, true, 0.6);
-    // The helicopter sweeps in ahead of the player, big in the sky, and Marco's
-    // warning sits on screen as the subtitle. It flies low for the frame and
-    // the camera tilts up so the sky — and the rotor — stay in shot.
-    placeHelicopter(world.heli, p.x - 15, p.z - 30, p.heading, 15);
-    world.cam.drag(0, -140);
+    // The helicopter sweeps in low and close on the player's left, big in the
+    // sky, and Marco's warning sits on screen as the subtitle. The camera
+    // tilts up hard so the rotor dominates the frame instead of empty road.
+    placeHelicopter(world.heli, p.x - 7, p.z - 18, p.heading, 11);
+    world.cam.drag(0, -150);
     world.cam.update(1, { x: world.player.x, y: 0, z: world.player.z }, world.player.heading, true, 0.6);
     world.dialogue.showNow('MARCO', 'Three stars, Kai. They\u2019re calling the chopper.');
     world.updateHud();
@@ -118,14 +118,17 @@ export function stageShot(name, world) {
     return SCREEN_PLAY;
   }
   if (name === 'foot') {
-    // On foot on Palm Row: Kai mid-punch, a pedestrian down, one star, the pink
-    // Vortex GT parked beside him, mission 1 asking for a car.
-    startMission(world.missions, 0);
+    // On foot in Rustport Docks: Kai inside the container yard on mission 6, a
+    // yard worker down, one star, the pink Vortex GT parked beside him, stacked
+    // containers on both sides and gantry Crane 7 ahead — the port reads as its
+    // own place. The pickup lane is a hundred metres south, so the mission
+    // stays on step 0.
+    startMission(world.missions, 5);
     addWanted(world.police, 1);
     const player = world.player;
-    player.x = 0;
-    player.z = 31;
-    player.heading = Math.PI * 0.75;
+    player.x = -272;
+    player.z = -88;
+    player.heading = 1.11;
     const ped = world.peds[3];
     ped.x = player.x + Math.sin(player.heading) * 2.1;
     ped.z = player.z + Math.cos(player.heading) * 2.1;
@@ -134,46 +137,54 @@ export function stageShot(name, world) {
     punchTarget(player, world.peds);
     knockPedDown(ped);
     const car = world.playerCar;
-    car.x = 6;
-    car.z = 31;
-    car.heading = Math.PI / 2;
+    car.x = -264;
+    car.z = -80;
+    car.heading = 1.11;
     car.mesh.position.set(car.x, 0, car.z);
     world.cam.snapBehind(player.heading);
-    world.cam.drag(60, -30);
+    world.cam.zoom(-100);
+    world.cam.drag(40, -60);
     world.setScreen(SCREEN_PLAY);
     runSteps(world, idleInput(), 1.2);
-    world.dialogue.showNow('MARCO', 'Kai. You need wheels, I need a driver.');
+    world.dialogue.showNow('RINA', 'One more crate, Kai \u2014 Rustport Docks, container yard.');
     world.updateHud();
     world.setScreen(SCREEN_PLAY);
     return SCREEN_PLAY;
   }
   if (name === 'end') {
-    // Story complete at the Bayfront Safehouse: the banner, the payout, the car,
-    // the sun going down over the bay.
+    // Story complete at Marco's Garage: the fully tuned Vortex GT, the tuning
+    // panel open showing the upgrades, the payout banner, and the sun going
+    // down over the bay.
     world.missions.finished = true;
-    world.state.cash = 4200;
-    world.state.missionsDone = 5;
+    world.state.cash = 6800;
+    world.state.missionsDone = 6;
+    world.state.tune = { engine: 2, tires: 1, armor: 1, nitro: 1 };
+    world.state.nitroCharges = 3;
+    world.playerCar.tune = world.state.tune;
+    world.playerCar.maxHealth = 160;
     const player = world.player;
-    player.x = 186;
-    player.z = 196;
+    player.x = 118;
+    player.z = -116;
     player.heading = Math.PI * 0.9;
     player.mesh.position.set(player.x, 0, player.z);
     const car = world.playerCar;
-    car.x = 178;
-    car.z = 196;
+    car.x = 110;
+    car.z = -122;
     car.heading = Math.PI / 2;
     car.mesh.position.set(car.x, 0, car.z);
     world.cam.snapBehind(player.heading);
     world.cam.zoom(300);
     world.cam.drag(-90, -40);
     world.cam.update(1, { x: player.x, y: 0, z: player.z }, player.heading, false, 0);
-    world.hud.showBanner('STORY COMPLETE', 'Neon Bay is yours. +$2,500 — Kai Mercer, wheelman.', 30);
-    world.dialogue.showNow('KAI', 'Five jobs. One city. Mine.');
+    world.hud.showBanner('STORY COMPLETE', 'Neon Bay is yours. +$3,000 — Kai Mercer, wheelman.', 30);
+    world.dialogue.showNow('KAI', 'Six jobs. One city. Mine.');
+    world.openTuning();
     world.setScreen(SCREEN_COMPLETE);
     world.updateHud();
     return SCREEN_COMPLETE;
   }
-  // Default: the title screen over a living city at golden hour.
+  // Default: the title screen over the beachfront at golden hour — the Neon
+  // Spire, the hotels and the living city behind the title card.
   const player = world.player;
   player.x = 202;
   player.z = 0;
