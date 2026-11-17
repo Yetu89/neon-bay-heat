@@ -29,6 +29,11 @@
   #hud-speed-unit { font-size: 15px; color: #ffd166; }
   #hud-ammo { position: absolute; left: 18px; bottom: 54px; font-size: 15px; font-weight: 700; text-shadow: 0 1px 4px #000; }
   #hud-hint { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); font-size: 13px; padding: 7px 14px; white-space: nowrap; }
+  #hud-dialogue { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); padding: 8px 16px; font-size: 15px; max-width: 56vw; text-align: center; text-shadow: 0 1px 4px #000; }
+  #hud-dialogue-speaker { color: #fee440; font-weight: 800; letter-spacing: 1px; margin-right: 6px; }
+  #hud-dialogue-log { position: absolute; left: 14px; top: 148px; padding: 8px 12px; font-size: 12.5px; line-height: 1.5; max-width: 280px; color: #e8e4f5; }
+  #hud-dialogue-log .dlg-row { opacity: 0.85; }
+  #hud-dialogue-log .dlg-row b { color: #fee440; }
   #hud-banner { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); text-align: center; padding: 18px 34px; }
   #hud-banner-title { font-size: 34px; font-weight: 900; letter-spacing: 3px; color: #fee440; text-shadow: 0 0 18px rgba(255, 46, 136, 0.8); }
   #hud-banner-sub { font-size: 16px; margin-top: 6px; color: #fff; }
@@ -69,6 +74,8 @@
   </div>
   <div id="hud-speed">—<div id="hud-speed-unit">ON FOOT</div></div>
   <div id="hud-ammo"></div>
+  <div id="hud-dialogue-log" class="panel"></div>
+  <div id="hud-dialogue" class="panel hidden"><span id="hud-dialogue-speaker"></span><span id="hud-dialogue-text"></span></div>
   <div id="hud-hint" class="panel"></div>
   <div id="hud-banner" class="panel hidden">
     <div id="hud-banner-title"></div>
@@ -82,11 +89,11 @@
     <div class="game-sub">An open-world crime game — a sun-soaked city of your own.</div>
     <p class="story">Kai Mercer is new in Neon Bay, and broke. Marco Hale needs a wheelman who asks
       no questions: steal a car, run a hot delivery, then lose Bay PD at three stars and vanish.
-      Traffic, pedestrians, police, missions, tokens — the whole city is yours to take.</p>
+      Five missions, a street race, traffic, pedestrians, police — the whole city is yours to take.</p>
     <div class="controls">
       <b>WASD</b> move / drive &nbsp;•&nbsp; <b>Mouse drag</b> camera &nbsp;•&nbsp; <b>Wheel</b> zoom<br>
       <b>E</b> steal / enter car &nbsp;•&nbsp; <b>SPACE</b> handbrake &nbsp;•&nbsp; <b>F</b> punch &nbsp;•&nbsp; <b>Click</b> shoot<br>
-      <b>SHIFT</b> run &nbsp;•&nbsp; <b>P</b> pause &nbsp;•&nbsp; <b>M</b> mute &nbsp;•&nbsp; <b>ENTER</b> start
+      <b>SHIFT</b> run &nbsp;•&nbsp; <b>G</b> repaint at Marco's Garage ($50) &nbsp;•&nbsp; <b>P</b> pause &nbsp;•&nbsp; <b>M</b> mute &nbsp;•&nbsp; <b>ENTER</b> start
     </div>
     <div id="title-stats"></div>
     <button id="btn-continue" class="btn hidden">CONTINUE</button>
@@ -123,7 +130,7 @@
 <div id="screen-complete" class="screen hidden">
   <div class="card">
     <div class="big gold">STORY COMPLETE</div>
-    <p class="story">Three jobs, one wheelman, zero witnesses who stayed to talk. Neon Bay is yours —
+    <p class="story">Five jobs, one wheelman, zero witnesses who stayed to talk. Neon Bay is yours —
       cruise it, collect the ten neon tokens, and keep the heat off your tail.</p>
     <button id="btn-continue-roam" class="btn">FREE ROAM</button>
   </div>

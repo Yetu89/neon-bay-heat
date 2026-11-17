@@ -10,6 +10,9 @@ export function createAudio() {
   let engineFilter = null;
   let sirenOsc = null;
   let sirenGain = null;
+  let rotorOsc = null;
+  let rotorGain = null;
+  let rotorFilter = null;
   let musicTimer = null;
   let muted = false;
   let musicStep = 0;
@@ -52,6 +55,19 @@ export function createAudio() {
       sirenOsc.connect(sirenGain);
       sirenGain.connect(master);
       sirenOsc.start();
+      // Rotor: a low chopped saw that throbs when the police helicopter flies.
+      rotorOsc = ctx.createOscillator();
+      rotorOsc.type = 'sawtooth';
+      rotorOsc.frequency.value = 38;
+      rotorFilter = ctx.createBiquadFilter();
+      rotorFilter.type = 'lowpass';
+      rotorFilter.frequency.value = 220;
+      rotorGain = ctx.createGain();
+      rotorGain.gain.value = 0;
+      rotorOsc.connect(rotorFilter);
+      rotorFilter.connect(rotorGain);
+      rotorGain.connect(master);
+      rotorOsc.start();
       return true;
     } catch {
       ctx = null;
@@ -143,6 +159,12 @@ export function createAudio() {
       sirenOsc.frequency.setValueAtTime(715, now);
       sirenOsc.frequency.linearRampToValueAtTime(950, now + 0.42);
       sirenOsc.frequency.linearRampToValueAtTime(715, now + 0.84);
+    },
+    // Helicopter rotor chop: on while the Bay PD helicopter is overhead.
+    rotor(on) {
+      if (!ctx || !rotorGain) return;
+      rotorGain.gain.setTargetAtTime(on && !muted ? 0.05 : 0, ctx.currentTime, 0.15);
+      if (on) rotorOsc.frequency.setTargetAtTime(34 + Math.sin(ctx.currentTime * 9) * 6, ctx.currentTime, 0.05);
     },
     gunshot() {
       noise(0.14, 0.5, 1800);

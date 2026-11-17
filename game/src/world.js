@@ -5,17 +5,19 @@ import * as THREE from 'three';
 import { BEACH_X, BEST_KEY, CAR_RADIUS, CITY_HALF, GRID, MISSIONS, PALETTE, PITCH, PLACES, SAVE_KEY, STEP, TOKEN_REWARD, TOKEN_SPOTS, WANTED, clamp, distance2D, lerp } from './config.js';
 import { createRandom } from './random.js';
 import { buildCity, collideBuildings } from './city.js';
-import { collideCars, createTraffic, driveCar, makeCar, stepTraffic } from './vehicles.js';
+import { collideCars, createTraffic, driveCar, makeCar, repaintCar, stepTraffic } from './vehicles.js';
 import { createPedestrians, knockPedDown, stepPedestrians } from './pedestrians.js';
 import { createPlayer, punchTarget, shootTarget, stepPlayerOnFoot } from './player.js';
 import { addWanted, clearWanted, createPolice, stepPolice } from './police.js';
+import { createHelicopter, stepHelicopter } from './helicopter.js';
+import { DIALOGUE, DIALOGUE_FAIL, DIALOGUE_FINALE, createDialogue } from './dialogue.js';
 import { MISSION_DONE, MISSION_FAILED, MISSION_STARTED, MISSION_STEP_DONE, createMissions, missionMarker, missionObjective, missionReward, missionTitle, startMission, startStory, stepMissions } from './missions.js';
 import { createEffects } from './effects.js';
 import { createRace, raceMarker, raceObjective, raceReward, stepRace, RACE_FAILED, RACE_GATE, RACE_STARTED, RACE_WON } from './race.js';
 import { createAudio } from './audio.js';
 import { createCamera } from './camera.js';
 import { createHud } from './hud.js';
-import { ACTION_ENTER, ACTION_PAUSE, ACTION_PUNCH, ACTION_SHOOT } from './input.js';
+import { ACTION_ENTER, ACTION_GARAGE, ACTION_PAUSE, ACTION_PUNCH, ACTION_SHOOT } from './input.js';
 
 export const SCREEN_TITLE = 'title';
 export const SCREEN_PLAY = 'play';
@@ -25,6 +27,12 @@ export const SCREEN_WASTED = 'wasted';
 export const SCREEN_COMPLETE = 'complete';
 
 const START_POS = { x: 0, z: 62 };
+// Garage paint jobs: hot pink, lagoon teal, sun gold — $50 a spray, cycled with G.
+const PAINT_JOBS = [
+  { name: 'Hot Pink', color: 0xff2e88 },
+  { name: 'Lagoon Teal', color: 0x00f5d4 },
+  { name: 'Sun Gold', color: 0xfee440 },
+];
 
 export function createWorld(canvas, seed) {
   const random = createRandom(seed);
@@ -45,6 +53,8 @@ export function createWorld(canvas, seed) {
   const peds = createPedestrians(scene, random, 26);
   const player = createPlayer(scene);
   const police = createPolice(scene);
+  const heli = createHelicopter(scene);
+  const dialogue = createDialogue(document);
   const missions = createMissions(scene);
   const race = createRace(scene);
 
@@ -86,6 +96,8 @@ export function createWorld(canvas, seed) {
     muted: false,
     exhaustTimer: 0,
     skidTimer: 0,
+    paintIndex: 0,
+    garageCooldown: 0,
   };
 
   function saveGame() {
@@ -135,6 +147,8 @@ export function createWorld(canvas, seed) {
     playerCar.health = 100;
     playerCar.wrecked = false;
     clearWanted(police);
+    heli.active = false;
+    heli.group.visible = false;
     cam.snapBehind(Math.PI);
     cam.update(0.1, { x: 0, y: 0, z: 62 }, Math.PI, false, 0);
   }
@@ -146,18 +160,21 @@ export function createWorld(canvas, seed) {
     if (missions.finished) {
       state.screen = SCREEN_PLAY;
       hud.showBanner('FREE ROAM', 'Story complete — cruise Neon Bay, collect tokens.', 4);
+      dialogue.show(DIALOGUE_FINALE);
     } else if (save && state.missionsDone > 0 && state.missionsDone < MISSIONS.length) {
       // Continue the story where the save left it.
       startMission(missions, state.missionsDone);
       state.screen = SCREEN_PLAY;
       const mission = MISSIONS[missions.index];
       hud.showBanner(mission.title, mission.intro, 4.5);
+      dialogue.show(DIALOGUE[missions.index].intro);
       audio.missionStart();
     } else {
       startStory(missions);
       state.screen = SCREEN_PLAY;
       const mission = MISSIONS[missions.index];
       hud.showBanner(mission.title, mission.intro, 4.5);
+      dialogue.show(DIALOGUE[missions.index].intro);
       audio.missionStart();
     }
     audio.unlock();
@@ -242,6 +259,7 @@ export function createWorld(canvas, seed) {
       if (missions.finished) {
         state.screen = SCREEN_COMPLETE;
         hud.showBanner('STORY COMPLETE', `Neon Bay is yours. +$${reward.toLocaleString('en-US')}`, 5);
+        dialogue.show(DIALOGUE_FINALE);
         try {
           const best = Number(window.localStorage.getItem(BEST_KEY) || '0');
           if (state.cash > best) window.localStorage.setItem(BEST_KEY, String(state.cash));
@@ -249,6 +267,8 @@ export function createWorld(canvas, seed) {
       } else {
         const next = MISSIONS[missions.index];
         hud.showBanner(`${next.title}  •  +$${reward.toLocaleString('en-US')}`, next.intro, 4.5);
+        dialogue.show(DIALOGUE[missions.index - 1].complete);
+        dialogue.show(DIALOGUE[missions.index].intro);
         audio.missionStart();
       }
       if (events & 0xff00) addWanted(police, (events >> 8) & 0xff);
@@ -257,6 +277,7 @@ export function createWorld(canvas, seed) {
     if (events & MISSION_FAILED) {
       audio.missionFail();
       hud.showBanner('MISSION FAILED', 'Out of time — the job is back on. Try again.', 3.5);
+      dialogue.show(DIALOGUE_FAIL);
       clearWanted(police);
       startMission(missions, missions.index);
     }
@@ -269,6 +290,8 @@ export function createWorld(canvas, seed) {
     state.clockMinutes += dt / 3;
     if (state.pedHitCooldown > 0) state.pedHitCooldown -= dt;
     if (state.crashCooldown > 0) state.crashCooldown -= dt;
+    if (state.garageCooldown > 0) state.garageCooldown -= dt;
+    if (city.spireBeam) city.spireBeam.rotation.y += dt * 0.6;
     if (state.saveTimer > 0) {
       state.saveTimer -= dt;
       if (state.saveTimer <= 0) saveGame();
@@ -435,6 +458,10 @@ export function createWorld(canvas, seed) {
       state.bustTimer = Math.max(0, state.bustTimer - dt * 2);
     }
 
+    // Bay PD helicopter: up at 3 stars, shadowing the player from the air.
+    stepHelicopter(heli, dt, { x: player.x, z: player.z }, police.wanted);
+    audio.rotor(heli.active);
+
     // Health regens when the heat is off.
     if (police.wanted === 0 && player.health < 100) player.health = Math.min(100, player.health + 4 * dt);
     if (player.health <= 0) {
@@ -499,6 +526,24 @@ export function createWorld(canvas, seed) {
       tokenMeshes[i].position.y = 1.4 + Math.sin(state.elapsed * 2 + i) * 0.25;
     }
 
+    // Marco's Garage: press G in a car here to repaint it for $50, cycling
+    // hot pink, lagoon teal and sun gold.
+    if ((actions & ACTION_GARAGE) && inCar && state.garageCooldown <= 0
+      && distance2D(player.x, player.z, PLACES.garage.at[0], PLACES.garage.at[1]) < 10) {
+      if (state.cash >= 50) {
+        state.cash -= 50;
+        state.paintIndex = (state.paintIndex + 1) % PAINT_JOBS.length;
+        const job = PAINT_JOBS[state.paintIndex];
+        repaintCar(player.inCar, job.color);
+        audio.pickup();
+        hud.showBanner('FRESH PAINT', `${job.name} — $50 at Marco's Garage.`, 2.5);
+        state.saveTimer = 0.5;
+      } else {
+        hud.showBanner('NO CASH', 'A repaint costs $50 — go earn it first.', 2);
+      }
+      state.garageCooldown = 1;
+    }
+
     // Spray & Shade: drive in with heat to clear it for $100.
     if (police.wanted > 0 && inCar && distance2D(player.x, player.z, PLACES.spray.at[0], PLACES.spray.at[1]) < 9) {
       if (state.cash >= 100) {
@@ -515,6 +560,7 @@ export function createWorld(canvas, seed) {
     cam.update(dt, focus, player.heading, inCar, inCar ? Math.abs(player.inCar.speed) / 40 : 0);
     audio.engine(inCar ? Math.abs(player.inCar.speed) / 40 : 0, inCar);
     audio.siren(police.wanted > 0 && police.cars.length > 0);
+    dialogue.update(dt);
     updateHud();
   }
 
@@ -528,6 +574,10 @@ export function createWorld(canvas, seed) {
     else if (nearCar) hint = 'E get in the car • F punch • CLICK shoot • M mute';
     if (!missions.active && !missions.finished) hint = 'ENTER start the story • ' + hint;
     if (police.wanted > 0 && player.inCar) hint += ' • Spray & Shade clears heat ($100)';
+    if (police.wanted >= 3) hint += ' • BAY PD HELICOPTER overhead!';
+    if (player.inCar && distance2D(player.x, player.z, PLACES.garage.at[0], PLACES.garage.at[1]) < 12) {
+      hint += ` • G repaint $50 (next: ${PAINT_JOBS[(state.paintIndex + 1) % PAINT_JOBS.length].name})`;
+    }
     if (race.active) hint = 'STREET RACE — follow the orange gate on the minimap!';
     const raceOn = race.active;
     hud.update({
@@ -549,6 +599,7 @@ export function createWorld(canvas, seed) {
       playerHeading: player.heading,
       traffic,
       policeCars: police.cars,
+      policeHeli: { x: heli.x, z: heli.z, active: heli.active },
       tokensTaken: state.tokensTaken,
       missionMarker: marker,
     }, STEP);
@@ -557,6 +608,7 @@ export function createWorld(canvas, seed) {
   // Ambient life for the title screen: traffic and pedestrians move, nothing else.
   function stepAmbient(dt, focus = { x: 0, y: 0, z: 62 }) {
     state.elapsed += dt;
+    if (city.spireBeam) city.spireBeam.rotation.y += dt * 0.6;
     stepTraffic(traffic, dt, city.colliders, null, random);
     stepPedestrians(peds, dt, city.colliders, { x: 9999, z: 9999, danger: false }, random);
     effects.step(dt);
@@ -578,9 +630,12 @@ export function createWorld(canvas, seed) {
     state,
     audio,
     hud,
+    city,
     missions,
     race,
     police,
+    heli,
+    dialogue,
     player,
     playerCar,
     traffic,

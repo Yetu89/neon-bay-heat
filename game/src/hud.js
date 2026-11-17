@@ -86,6 +86,24 @@ export function createHud(document) {
     mapCtx.fillRect(toPx(PLACES.safehouse.at[0]) - 3, toPx(PLACES.safehouse.at[1]) - 3, 6, 6);
     mapCtx.fillStyle = '#9b5de5';
     mapCtx.fillRect(toPx(PLACES.spray.at[0]) - 3, toPx(PLACES.spray.at[1]) - 3, 6, 6);
+    // Neon Spire landmark: a gold star on the beachfront.
+    mapCtx.fillStyle = '#fee440';
+    const sx = toPx(PLACES.spire.at[0]);
+    const sy = toPx(PLACES.spire.at[1]);
+    mapCtx.beginPath();
+    mapCtx.moveTo(sx, sy - 5);
+    mapCtx.lineTo(sx + 5, sy + 4);
+    mapCtx.lineTo(sx - 5, sy + 4);
+    mapCtx.closePath();
+    mapCtx.fill();
+    // Police helicopter overhead: a big flashing red/blue ring.
+    if (world.policeHeli?.active) {
+      mapCtx.strokeStyle = Math.floor(performance.now() / 200) % 2 ? '#ff2222' : '#2266ff';
+      mapCtx.lineWidth = 2.5;
+      mapCtx.beginPath();
+      mapCtx.arc(toPx(world.policeHeli.x), toPx(world.policeHeli.z), 6, 0, Math.PI * 2);
+      mapCtx.stroke();
+    }
     // Traffic (white) and police (red/blue).
     mapCtx.fillStyle = '#ffffff';
     for (const car of world.traffic) {

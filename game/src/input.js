@@ -9,6 +9,7 @@ export const ACTION_CONFIRM = 8;
 export const ACTION_RELOAD = 16;
 export const ACTION_MUTE = 32;
 export const ACTION_SHOOT = 64;
+export const ACTION_GARAGE = 128; // G: repaint at Marco's Garage ($50)
 
 const FORWARD = new Set(['KeyW', 'ArrowUp']);
 const BACK = new Set(['KeyS', 'ArrowDown']);
@@ -34,6 +35,7 @@ export function createInput(canvas) {
     else if (event.code === 'Enter' || event.code === 'Space') actions |= ACTION_CONFIRM;
     else if (event.code === 'KeyR') actions |= ACTION_RELOAD;
     else if (event.code === 'KeyM') actions |= ACTION_MUTE;
+    else if (event.code === 'KeyG') actions |= ACTION_GARAGE;
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
   });
   window.addEventListener('keyup', (event) => keys.delete(event.code));

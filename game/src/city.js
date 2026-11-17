@@ -261,6 +261,95 @@ export function buildCity(scene, random) {
   for (let b = 0; b < 6; b += 1) {
     addBench(group, BEACH_X - 4, -150 + b * 60, Math.PI / 2);
   }
+  // Boardwalk, beachfront hotels and the Neon Spire: the dense beachfront
+  // district east of the grid, so the coast reads as a place, not an edge.
+  // Hotels sit at x 226, clear of the Flamingo Beach pickup (z 124) and the
+  // beach token (z 62); the Spire stands alone at the north end of the sand.
+  const boardwalk = new THREE.Mesh(
+    new THREE.PlaneGeometry(16, 380),
+    new THREE.MeshStandardMaterial({ color: 0x9a7b4f, roughness: 1 }),
+  );
+  boardwalk.rotation.x = -Math.PI / 2;
+  boardwalk.position.set(222, 0.07, 0);
+  boardwalk.receiveShadow = true;
+  group.add(boardwalk);
+  const hotelColors = [0xff8fa3, 0x7bdff2, 0xffd166, 0xf7ede2];
+  const hotelSpots = [[-175, 52], [-85, 34], [-30, 46], [25, 30]];
+  for (let h = 0; h < hotelSpots.length; h += 1) {
+    const [hz, hh] = hotelSpots[h];
+    const hx = 226;
+    const mat = new THREE.MeshStandardMaterial({ map: facades[h % facades.length], roughness: 0.85 });
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(18, hh, 18), mat);
+    tower.position.set(hx, hh / 2, hz);
+    tower.castShadow = true;
+    tower.receiveShadow = true;
+    group.add(tower);
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(12, 1.2, 12), roofMat);
+    roof.position.set(hx, hh + 0.6, hz);
+    group.add(roof);
+    const sign = new THREE.Mesh(
+      new THREE.BoxGeometry(10, 2.4, 0.4),
+      new THREE.MeshBasicMaterial({ color: PALETTE.neon[h % PALETTE.neon.length] }),
+    );
+    sign.position.set(hx, hh + 2.6, hz - 9.2);
+    group.add(sign);
+    const strip = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, hh * 0.7, 0.5),
+      new THREE.MeshBasicMaterial({ color: hotelColors[h % hotelColors.length] }),
+    );
+    strip.position.set(hx + 9.3, hh * 0.35, hz + 4);
+    group.add(strip);
+    colliders.push({ x: hx, z: hz, hw: 9, hd: 9 });
+  }
+  for (let z = -180; z <= 180; z += 36) plantPalms(group, random, 218, z, 1);
+  // The Neon Spire: a striped lighthouse tower with a rotating beacon beam,
+  // the one landmark you can see from anywhere in Neon Bay.
+  const spireX = 240;
+  const spireZ = -120;
+  const spireBase = new THREE.Mesh(
+    new THREE.CylinderGeometry(6.5, 7.5, 4, 12),
+    new THREE.MeshStandardMaterial({ color: 0x2b2b33, roughness: 0.8 }),
+  );
+  spireBase.position.set(spireX, 2, spireZ);
+  spireBase.castShadow = true;
+  group.add(spireBase);
+  const spireColors = [0xf7ede2, 0xff2e88, 0xf7ede2, 0x00f5d4, 0xf7ede2, 0xfee440];
+  for (let s = 0; s < spireColors.length; s += 1) {
+    const seg = new THREE.Mesh(
+      new THREE.CylinderGeometry(3.4 - s * 0.12, 3.6 - s * 0.12, 7.5, 12),
+      new THREE.MeshStandardMaterial({ color: spireColors[s], roughness: 0.7 }),
+    );
+    seg.position.set(spireX, 4 + s * 7.5 + 3.75, spireZ);
+    seg.castShadow = true;
+    group.add(seg);
+  }
+  const spireTop = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.2, 3.2, 3, 10),
+    new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.5, metalness: 0.6 }),
+  );
+  spireTop.position.set(spireX, 52, spireZ);
+  group.add(spireTop);
+  const spireLamp = new THREE.Mesh(
+    new THREE.SphereGeometry(1.6, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0xfff2b0 }),
+  );
+  spireLamp.position.set(spireX, 52, spireZ);
+  group.add(spireLamp);
+  const spireLight = new THREE.PointLight(0xfff2b0, 900, 160, 1.8);
+  spireLight.position.set(spireX, 52, spireZ);
+  group.add(spireLight);
+  // Two long beams sweeping the sky from the lamp room, rotating over time.
+  const spireBeam = new THREE.Group();
+  const beamMat = new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+  for (const dir of [-1, 1]) {
+    const beam = new THREE.Mesh(new THREE.ConeGeometry(3.5, 60, 8, 1, true), beamMat);
+    beam.rotation.z = dir * Math.PI / 2;
+    beam.position.x = dir * 30;
+    spireBeam.add(beam);
+  }
+  spireBeam.position.set(spireX, 52, spireZ);
+  group.add(spireBeam);
+  colliders.push({ x: spireX, z: spireZ, hw: 7.5, hd: 7.5 });
   // Palm rows along the two main avenues so the roads feel planted, not bare.
   for (let a = -2; a <= 2; a += 1) {
     plantPalms(group, random, 62 + 11, a * PITCH, 1);
@@ -272,7 +361,7 @@ export function buildCity(scene, random) {
     PARKED_SPOTS.push([random.pick([-186, -124, -62, 0, 62, 124]) + random.range(-4, 4), random.pick([-186, -124, -62, 0, 62, 124]) + random.range(-4, 4)]);
   }
 
-  return { colliders, group, parkedSpots: PARKED_SPOTS };
+  return { colliders, group, parkedSpots: PARKED_SPOTS, spireBeam };
 }
 
 function addBush(group, x, z) {

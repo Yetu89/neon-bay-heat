@@ -133,6 +133,8 @@ export const PLACES = {
   safehouse: { name: 'Bayfront Safehouse', at: [186, 186] },
   spray: { name: 'Spray & Shade', at: [-62, -186] }, // cool zone: clears wanted for $100
   beach: { name: 'Flamingo Beach', at: [228, 0] },
+  spire: { name: 'Neon Spire', at: [240, -120] }, // beachfront landmark lighthouse
+  boardwalk: { name: 'Boardwalk', at: [222, -60] },
 };
 
 // Ten glowing neon tokens hidden around the city: +$100 each, saved when collected.

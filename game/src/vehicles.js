@@ -74,6 +74,7 @@ export function buildCarMesh(color, police = false, type = 'sedan') {
     group.add(lightBar);
   }
   group.userData.lightBar = lightBar;
+  group.userData.bodyMat = bodyMat;
   return group;
 }
 
@@ -112,6 +113,7 @@ function buildVanMesh(color) {
     group.add(tail);
   }
   group.userData.lightBar = null;
+  group.userData.bodyMat = bodyMat;
   return group;
 }
 
@@ -151,7 +153,14 @@ function buildTruckMesh(color) {
     group.add(tail);
   }
   group.userData.lightBar = null;
+  group.userData.bodyMat = cabMat;
   return group;
+}
+
+// Repaint a car in the garage: recolour its body material in place.
+export function repaintCar(car, color) {
+  const mat = car.mesh.userData.bodyMat;
+  if (mat) mat.color.setHex(color);
 }
 
 export function makeCar(x, z, heading, color, police = false, type = 'sedan') {

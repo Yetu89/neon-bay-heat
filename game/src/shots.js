@@ -4,6 +4,7 @@
 // always gives the same frame. No pixels are faked: the scene is the live game.
 import { STEP, clamp } from './config.js';
 import { addWanted, placePoliceCar } from './police.js';
+import { placeHelicopter } from './helicopter.js';
 import { knockPedDown } from './pedestrians.js';
 import { punchTarget } from './player.js';
 import { startMission } from './missions.js';
@@ -62,12 +63,12 @@ function runSteps(world, input, seconds) {
 export function stageShot(name, world) {
   world.resetRun();
   if (name === 'play') {
-    // Mission 2's delivery run, mid-chase: two stars, Bay PD closing in, the Neon
-    // Hotel marker ahead, traffic on the avenue.
+    // Mission 2's delivery run, mid-chase: three stars, Bay PD closing in on the
+    // ground and the police helicopter overhead, the Neon Hotel marker ahead.
     startMission(world.missions, 1);
     world.missions.step = 1;
     world.missions.timer = 62;
-    addWanted(world.police, 2);
+    addWanted(world.police, 3);
     const car = world.playerCar;
     car.x = 62;
     car.z = 120;
@@ -105,6 +106,14 @@ export function stageShot(name, world) {
     world.cam.zoom(-150);
     world.cam.drag(-40, 60);
     world.cam.update(1, { x: world.player.x, y: 0, z: world.player.z }, world.player.heading, true, 0.6);
+    // The helicopter sweeps in ahead of the player, big in the sky, and Marco's
+    // warning sits on screen as the subtitle. It flies low for the frame and
+    // the camera tilts up so the sky — and the rotor — stay in shot.
+    placeHelicopter(world.heli, p.x - 15, p.z - 30, p.heading, 15);
+    world.cam.drag(0, -140);
+    world.cam.update(1, { x: world.player.x, y: 0, z: world.player.z }, world.player.heading, true, 0.6);
+    world.dialogue.showNow('MARCO', 'Three stars, Kai. They\u2019re calling the chopper.');
+    world.updateHud();
     world.setScreen(SCREEN_PLAY);
     return SCREEN_PLAY;
   }
@@ -133,6 +142,8 @@ export function stageShot(name, world) {
     world.cam.drag(60, -30);
     world.setScreen(SCREEN_PLAY);
     runSteps(world, idleInput(), 1.2);
+    world.dialogue.showNow('MARCO', 'Kai. You need wheels, I need a driver.');
+    world.updateHud();
     world.setScreen(SCREEN_PLAY);
     return SCREEN_PLAY;
   }
@@ -157,6 +168,7 @@ export function stageShot(name, world) {
     world.cam.drag(-90, -40);
     world.cam.update(1, { x: player.x, y: 0, z: player.z }, player.heading, false, 0);
     world.hud.showBanner('STORY COMPLETE', 'Neon Bay is yours. +$2,500 — Kai Mercer, wheelman.', 30);
+    world.dialogue.showNow('KAI', 'Five jobs. One city. Mine.');
     world.setScreen(SCREEN_COMPLETE);
     world.updateHud();
     return SCREEN_COMPLETE;
