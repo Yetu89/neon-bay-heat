@@ -89,6 +89,7 @@ export function stepMissions(missions, dt, ctx) {
   if (step.kind === 'steal') {
     if (ctx.inCar) {
       missions.step += 1;
+      missions.timer = 0; // the next step sets its own limit, if it has one
       events |= MISSION_STEP_DONE;
     }
   } else if (step.kind === 'goto' || step.kind === 'escape') {
@@ -98,6 +99,7 @@ export function stepMissions(missions, dt, ctx) {
         // Reaching the safehouse while still hot does not count: lose the heat first.
       } else {
         missions.step += 1;
+        missions.timer = 0; // the next step sets its own limit, if it has one
         events |= MISSION_STEP_DONE;
       }
     }

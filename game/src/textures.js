@@ -19,12 +19,14 @@ export function createGroundTexture() {
   const toPx = (v) => ((v + span / 2) / span) * size;
   ctx.fillStyle = '#33303a';
   ctx.fillRect(0, 0, size, size);
-  // Sidewalk blocks: warm concrete squares between the roads.
-  ctx.fillStyle = '#b9b0a2';
+  // Sidewalk blocks: warm concrete squares between the roads, two tones so the
+  // grid does not read as one flat slab.
+  const tones = ['#b9b0a2', '#a89e8d'];
   for (let i = -GRID; i < GRID; i += 1) {
     for (let j = -GRID; j < GRID; j += 1) {
       const x0 = (i + 0.5) * PITCH - BLOCK / 2;
       const z0 = (j + 0.5) * PITCH - BLOCK / 2;
+      ctx.fillStyle = tones[(i + j + 200) % 2];
       ctx.fillRect(toPx(x0), toPx(z0), (BLOCK / span) * size, (BLOCK / span) * size);
     }
   }
@@ -35,14 +37,25 @@ export function createGroundTexture() {
   ctx.fillRect(toPx(SEA_X), 0, size - toPx(SEA_X), size);
   ctx.fillStyle = '#1d5f7a';
   for (let y = 0; y < size; y += 46) ctx.fillRect(toPx(SEA_X), y, size - toPx(SEA_X), 3);
-  // Lane dashes along every road, both directions.
+  // Lane dashes along every road, both directions: thin paint, not slabs.
   ctx.fillStyle = '#f5d76e';
-  const dash = (ROAD * 0.22 / span) * size;
+  const dashW = (0.55 / span) * size;
+  const dashL = (3.2 / span) * size;
   for (let i = -GRID; i <= GRID; i += 1) {
     const c = i * PITCH;
-    for (let d = -CITY_HALF; d < CITY_HALF; d += 16) {
-      ctx.fillRect(toPx(c) - dash / 2, toPx(d), dash, (7 / span) * size);
-      ctx.fillRect(toPx(d), toPx(c) - dash / 2, (7 / span) * size, dash);
+    for (let d = -CITY_HALF; d < CITY_HALF; d += 12) {
+      ctx.fillRect(toPx(c) - dashW / 2, toPx(d), dashW, dashL);
+      ctx.fillRect(toPx(d), toPx(c) - dashW / 2, dashL, dashW);
+    }
+  }
+  // Solid white edge lines where the asphalt meets the sidewalk.
+  ctx.fillStyle = 'rgba(235,235,228,0.7)';
+  const edgeW = (0.35 / span) * size;
+  for (let i = -GRID; i <= GRID; i += 1) {
+    const c = i * PITCH;
+    for (const off of [-ROAD / 2 + 0.7, ROAD / 2 - 0.7]) {
+      ctx.fillRect(toPx(c + off) - edgeW / 2, toPx(-CITY_HALF), edgeW, (CITY_HALF * 2 / span) * size);
+      ctx.fillRect(toPx(-CITY_HALF), toPx(c + off) - edgeW / 2, (CITY_HALF * 2 / span) * size, edgeW);
     }
   }
   // Crosswalk stripes at every intersection.

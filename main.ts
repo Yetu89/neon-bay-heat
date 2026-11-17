@@ -5,8 +5,8 @@
 // /output/dossier.json, the summary the judge reads, with the vendored make.fun
 // library. The game itself is an original open-world crime game: a 3D city to explore
 // on foot and by car, traffic and pedestrians, cars to steal, a wanted level with
-// police who respond, three story missions, combat, a HUD with a minimap, a start
-// screen and a localStorage save, and synthesised sound.
+// police who respond, five story missions plus a repeatable street race, combat,
+// a HUD with a minimap, a start screen and a localStorage save, and synthesised sound.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:

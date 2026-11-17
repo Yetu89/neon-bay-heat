@@ -21,7 +21,7 @@ export function createEffects(scene) {
   const color = new THREE.Color();
   let cursor = 0;
 
-  function burst(x, y, z, count, speed, up, r, g, b, life = 0.7) {
+  function burst(x, y, z, count, speed, up, r, g, b, life = 0.7, sizeScale = 1) {
     for (let k = 0; k < count; k += 1) {
       const p = parts[cursor];
       cursor = (cursor + 1) % MAX;
@@ -37,7 +37,7 @@ export function createEffects(scene) {
       p.r = r;
       p.g = g;
       p.b = b;
-      p.size = 0.7 + Math.random() * 1.1;
+      p.size = (0.7 + Math.random() * 1.1) * sizeScale;
     }
   }
 
@@ -47,6 +47,14 @@ export function createEffects(scene) {
     },
     smoke(x, z) {
       burst(x, 1.2, z, 6, 1.5, 2.5, 0.45, 0.45, 0.5, 1.1);
+    },
+    // Exhaust puffs: small grey clouds spat from a tailpipe.
+    exhaust(x, z) {
+      burst(x, 0.6, z, 2, 0.8, 1.6, 0.55, 0.55, 0.58, 0.7, 0.55);
+    },
+    // Skid dust: tan clouds kicked up by sliding tyres.
+    dust(x, z) {
+      burst(x, 0.3, z, 5, 2.2, 1.2, 0.72, 0.62, 0.48, 0.6, 0.8);
     },
     muzzle(x, y, z) {
       burst(x, y, z, 8, 5, 1, 1, 0.9, 0.3, 0.25);

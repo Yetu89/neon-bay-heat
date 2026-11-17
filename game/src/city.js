@@ -36,6 +36,10 @@ export function buildCity(scene, random) {
   sun.shadow.bias = -0.0004;
   group.add(sun);
   group.add(new THREE.HemisphereLight(0xffd9b0, 0x3a2f4a, 1.1));
+  // A cool fill from the sea side so shadowed facades are not dead black.
+  const fill = new THREE.DirectionalLight(0x8fb4ff, 0.5);
+  fill.position.set(260, 90, 160);
+  group.add(fill);
 
   // Ground: one textured plane for the whole city, beach and sea.
   const ground = createGroundTexture();
@@ -66,8 +70,18 @@ export function buildCity(scene, random) {
       const cz = (j + 0.5) * PITCH;
       const dist = Math.hypot(cx, cz) / CITY_HALF;
       if (random.chance(0.12)) {
-        // A pocket park: palms and a bench instead of a tower.
+        // A pocket park: lawn, bushes, palms and a bench instead of a tower.
+        const lawn = new THREE.Mesh(
+          new THREE.PlaneGeometry(BLOCK - 4, BLOCK - 4),
+          new THREE.MeshStandardMaterial({ color: 0x4d9e57, roughness: 1 }),
+        );
+        lawn.rotation.x = -Math.PI / 2;
+        lawn.position.set(cx, 0.06, cz);
+        lawn.receiveShadow = true;
+        group.add(lawn);
         plantPalms(group, random, cx, cz, 5);
+        for (let b = 0; b < 4; b += 1) addBush(group, cx + random.range(-BLOCK / 2 + 5, BLOCK / 2 - 5), cz + random.range(-BLOCK / 2 + 5, BLOCK / 2 - 5));
+        addBench(group, cx + random.range(-8, 8), cz + random.range(-8, 8), random.range(0, Math.PI));
         continue;
       }
       const count = random.chance(0.35) ? 2 : 1;
@@ -88,14 +102,66 @@ export function buildCity(scene, random) {
         const roof = new THREE.Mesh(new THREE.BoxGeometry(w * 0.7, 1.2, d * 0.7), roofMat);
         roof.position.set(x, h + 0.6, z);
         group.add(roof);
-        // A neon rooftop sign on the tallest towers.
-        if (h > 30) {
+        // Tall towers step back: a smaller crown box on top.
+        if (h > 26) {
+          const crown = new THREE.Mesh(new THREE.BoxGeometry(w * 0.45, random.range(3, 7), d * 0.45), mat);
+          crown.position.set(x, h + 1.2 + crown.geometry.parameters.height / 2, z);
+          crown.castShadow = true;
+          group.add(crown);
+        }
+        // Roof clutter: an AC unit and, on the tallest, a blinking antenna.
+        if (random.chance(0.6)) {
+          const ac = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1, 1.6), new THREE.MeshStandardMaterial({ color: 0x9a9aa2, roughness: 0.8, metalness: 0.4 }));
+          ac.position.set(x + w * 0.2, h + 1.7, z + d * 0.15);
+          group.add(ac);
+        }
+        if (h > 38) {
+          const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 7, 5), new THREE.MeshStandardMaterial({ color: 0x55555e, roughness: 0.5, metalness: 0.7 }));
+          antenna.position.set(x - w * 0.2, h + 4.5, z - d * 0.2);
+          group.add(antenna);
+          const tip = new THREE.Mesh(new THREE.SphereGeometry(0.35, 6, 5), new THREE.MeshBasicMaterial({ color: 0xff4444 }));
+          tip.position.set(x - w * 0.2, h + 8.2, z - d * 0.2);
+          group.add(tip);
+        }
+        // A neon rooftop sign on the taller towers, and a vertical neon strip
+        // down one face so the skyline glows from the street too.
+        if (h > 22 && random.chance(0.55)) {
           const sign = new THREE.Mesh(
             new THREE.BoxGeometry(w * 0.5, 2.2, 0.4),
             new THREE.MeshBasicMaterial({ color: PALETTE.neon[random.int(0, PALETTE.neon.length - 1)] }),
           );
           sign.position.set(x, h + 2.4, z - d / 2 - 0.2);
           group.add(sign);
+        }
+        if (h > 18 && random.chance(0.4)) {
+          const strip = new THREE.Mesh(
+            new THREE.BoxGeometry(0.5, h * 0.7, 0.5),
+            new THREE.MeshBasicMaterial({ color: PALETTE.neon[random.int(0, PALETTE.neon.length - 1)] }),
+          );
+          strip.position.set(x + w / 2 + 0.3, h * 0.35, z + d * 0.2);
+          group.add(strip);
+        }
+        // A big glowing billboard on the roof edge of one building in five.
+        if (random.chance(0.2)) {
+          const boardColor = PALETTE.neon[random.int(0, PALETTE.neon.length - 1)];
+          const board = new THREE.Mesh(
+            new THREE.BoxGeometry(w * 0.62, 4.5, 0.3),
+            new THREE.MeshBasicMaterial({ color: boardColor }),
+          );
+          board.position.set(x, h + 3.6, z - d / 2 - 0.4);
+          group.add(board);
+          const boardBack = new THREE.Mesh(
+            new THREE.BoxGeometry(w * 0.62, 4.5, 0.2),
+            new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.9 }),
+          );
+          boardBack.position.set(x, h + 3.6, z - d / 2 - 0.6);
+          group.add(boardBack);
+          const frame = new THREE.Mesh(
+            new THREE.BoxGeometry(w * 0.62 + 0.6, 0.4, 0.5),
+            new THREE.MeshStandardMaterial({ color: 0x22222a, roughness: 0.7 }),
+          );
+          frame.position.set(x, h + 6, z - d / 2 - 0.5);
+          group.add(frame);
         }
         colliders.push({ x, z, hw: w / 2, hd: d / 2 });
       }
@@ -125,12 +191,121 @@ export function buildCity(scene, random) {
     PARKED_SPOTS.push([BEACH_X - 12, z]);
   }
 
+  // Street props: traffic lights at the central intersections, hydrants, stop
+  // signs, beach umbrellas and benches, and palms along the main avenues.
+  const lightColors = [0xff2a2a, 0xffc93c, 0x2ec44b];
+  for (let i = -2; i <= 2; i += 1) {
+    for (let j = -2; j <= 2; j += 1) {
+      const lx = i * PITCH + ROAD / 2 + 1.6;
+      const lz = j * PITCH + ROAD / 2 + 1.6;
+      const tPole = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, 5.4, 6), poleMat);
+      tPole.position.set(lx, 2.7, lz);
+      group.add(tPole);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.55, 1.5, 0.55), new THREE.MeshStandardMaterial({ color: 0x1a1a20, roughness: 0.6 }));
+      head.position.set(lx, 5.6, lz);
+      group.add(head);
+      for (let k = 0; k < 3; k += 1) {
+        const lamp = new THREE.Mesh(
+          new THREE.SphereGeometry(0.17, 8, 6),
+          new THREE.MeshBasicMaterial({ color: lightColors[k] }),
+        );
+        lamp.position.set(lx, 6.05 - k * 0.45, lz + 0.29);
+        group.add(lamp);
+      }
+    }
+  }
+  const hydrantMat = new THREE.MeshStandardMaterial({ color: 0xd62828, roughness: 0.5, metalness: 0.3 });
+  const hydrantCapMat = new THREE.MeshStandardMaterial({ color: 0x8f1d1d, roughness: 0.5 });
+  for (let h = 0; h < 14; h += 1) {
+    const hx = random.pick([-124, -62, 0, 62, 124]) + random.range(-3, 3) + (random.chance(0.5) ? 9 : -9);
+    const hz = random.pick([-124, -62, 0, 62, 124]) + random.range(-3, 3);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.4, 0.9, 8), hydrantMat);
+    body.position.set(hx, 0.45, hz);
+    body.castShadow = true;
+    group.add(body);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 6), hydrantCapMat);
+    cap.position.set(hx, 0.95, hz);
+    group.add(cap);
+  }
+  // Stop signs on a few side streets.
+  for (let s = 0; s < 12; s += 1) {
+    const sx = random.pick([-186, -124, -62, 0, 62, 124, 186]);
+    const sz = random.pick([-186, -124, -62, 0, 62, 124, 186]) + (random.chance(0.5) ? 9.5 : -9.5);
+    const sPole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.6, 5), poleMat);
+    sPole.position.set(sx, 1.3, sz);
+    group.add(sPole);
+    const oct = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55, 0.55, 0.08, 8),
+      new THREE.MeshStandardMaterial({ color: 0xd62828, roughness: 0.6 }),
+    );
+    oct.rotation.x = Math.PI / 2;
+    oct.position.set(sx, 2.9, sz);
+    group.add(oct);
+  }
+  // Beach umbrellas and benches along the sand.
+  const umbrellaColors = [0xff2e88, 0x00f5d4, 0xfee440, 0x9b5de5, 0xff8e63];
+  for (let u = 0; u < 8; u += 1) {
+    const ux = BEACH_X + 6 + random.range(0, 22);
+    const uz = -170 + u * 48 + random.range(-8, 8);
+    const uPole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 2.4, 5), poleMat);
+    uPole.position.set(ux, 1.2, uz);
+    group.add(uPole);
+    const canopy = new THREE.Mesh(
+      new THREE.ConeGeometry(2.4, 1.1, 8),
+      new THREE.MeshStandardMaterial({ color: umbrellaColors[u % umbrellaColors.length], roughness: 0.9 }),
+    );
+    canopy.position.set(ux, 2.8, uz);
+    canopy.castShadow = true;
+    group.add(canopy);
+  }
+  for (let b = 0; b < 6; b += 1) {
+    addBench(group, BEACH_X - 4, -150 + b * 60, Math.PI / 2);
+  }
+  // Palm rows along the two main avenues so the roads feel planted, not bare.
+  for (let a = -2; a <= 2; a += 1) {
+    plantPalms(group, random, 62 + 11, a * PITCH, 1);
+    plantPalms(group, random, -62 - 11, a * PITCH, 1);
+  }
+
   // Parked cars along the beach boulevard and a few side streets.
   for (let i = 0; i < 10; i += 1) {
     PARKED_SPOTS.push([random.pick([-186, -124, -62, 0, 62, 124]) + random.range(-4, 4), random.pick([-186, -124, -62, 0, 62, 124]) + random.range(-4, 4)]);
   }
 
   return { colliders, group, parkedSpots: PARKED_SPOTS };
+}
+
+function addBush(group, x, z) {
+  const bush = new THREE.Mesh(
+    new THREE.SphereGeometry(1.1, 8, 6),
+    new THREE.MeshStandardMaterial({ color: 0x2f7d3d, roughness: 1 }),
+  );
+  bush.scale.y = 0.75;
+  bush.position.set(x, 0.7, z);
+  bush.castShadow = true;
+  group.add(bush);
+}
+
+function addBench(group, x, z, rotY) {
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0x8a5a3b, roughness: 0.9 });
+  const ironMat = new THREE.MeshStandardMaterial({ color: 0x2b2b33, roughness: 0.6, metalness: 0.5 });
+  const bench = new THREE.Group();
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 0.7), woodMat);
+  seat.position.y = 0.55;
+  seat.castShadow = true;
+  bench.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.6, 0.1), woodMat);
+  back.position.set(0, 1.0, -0.32);
+  back.rotation.x = -0.15;
+  bench.add(back);
+  for (const lx of [-0.9, 0.9]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.55, 0.6), ironMat);
+    leg.position.set(lx, 0.28, 0);
+    bench.add(leg);
+  }
+  bench.position.set(x, 0, z);
+  bench.rotation.y = rotY;
+  group.add(bench);
 }
 
 function plantPalms(group, random, cx, cz, count) {

@@ -84,26 +84,26 @@ export function stageShot(name, world) {
     // Two interceptors flanking the player from behind, closing in to box it in.
     placePoliceCar(world.police, 52, 140, Math.PI, 38);
     placePoliceCar(world.police, 72, 144, Math.PI, 38);
-    runSteps(world, chaseInput(world, 62, -62), 3.5);
-    // Frame the chase: the two interceptors pull alongside ahead of the player,
-    // boxing it in on the avenue — the moment a pursuit looks like a pursuit.
+    runSteps(world, chaseInput(world, 62, -62), 3.0);
+    // Frame the chase: one interceptor pulls alongside behind the player, big
+    // in frame near the camera, the other boxes it in ahead on the avenue.
     const p = world.player;
     const c1 = world.police.cars[0];
     const c2 = world.police.cars[1];
     if (c1) {
-      c1.x = p.x - 6; c1.z = p.z - 19; c1.heading = p.heading;
+      c1.x = p.x - 6; c1.z = p.z + 4; c1.heading = p.heading;
       c1.mesh.position.set(c1.x, 0, c1.z);
       c1.mesh.rotation.y = c1.heading;
     }
     if (c2) {
-      c2.x = p.x + 6.5; c2.z = p.z - 13; c2.heading = p.heading;
+      c2.x = p.x + 5.5; c2.z = p.z - 11; c2.heading = p.heading;
       c2.mesh.position.set(c2.x, 0, c2.z);
       c2.mesh.rotation.y = c2.heading;
     }
-    // Wide, high three-quarter rear angle: the player's car, the avenue, and the
-    // pursuing police cars all in one frame.
-    world.cam.zoom(300);
-    world.cam.drag(-70, 90);
+    // Closer, lower three-quarter rear angle: the player's car fills the frame,
+    // the avenue and both interceptors read at a glance.
+    world.cam.zoom(-150);
+    world.cam.drag(-40, 60);
     world.cam.update(1, { x: world.player.x, y: 0, z: world.player.z }, world.player.heading, true, 0.6);
     world.setScreen(SCREEN_PLAY);
     return SCREEN_PLAY;
@@ -141,7 +141,7 @@ export function stageShot(name, world) {
     // the sun going down over the bay.
     world.missions.finished = true;
     world.state.cash = 4200;
-    world.state.missionsDone = 3;
+    world.state.missionsDone = 5;
     const player = world.player;
     player.x = 186;
     player.z = 196;

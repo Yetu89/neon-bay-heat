@@ -59,7 +59,7 @@ export const WANTED = [
 ];
 export const WANTED_DECAY_SECONDS = 12; // quiet time before one star drops
 
-// The story: three missions in order. Each step is one objective with a marker.
+// The story: five missions in order. Each step is one objective with a marker.
 export const MISSIONS = [
   {
     id: 'first-gear',
@@ -90,7 +90,40 @@ export const MISSIONS = [
       { id: 'escape', text: 'Lose the heat — reach the Bayfront Safehouse', kind: 'escape', at: [186, 186], radius: 11, wantedOnStart: 3 },
     ],
   },
+  {
+    id: 'neon-runner',
+    title: 'MISSION 4 — NEON RUNNER',
+    intro: 'The Midnight Apex crew runs the avenues at dusk. Beat their circuit — three gates, against the clock.',
+    reward: 1800,
+    steps: [
+      { id: 'gate1', text: 'Hit the first race gate on Palm Row', kind: 'goto', at: [62, 186], radius: 9, time: 50 },
+      { id: 'gate2', text: 'Second gate — south avenue, west end', kind: 'goto', at: [-124, 186], radius: 9, time: 50 },
+      { id: 'gate3', text: 'Final gate — cross the city to the north-east', kind: 'goto', at: [124, -62], radius: 9, time: 60 },
+    ],
+  },
+  {
+    id: 'big-score',
+    title: 'MISSION 5 — THE BIG SCORE',
+    intro: 'One last job: a duffel of hot diamonds at Flamingo Beach. Marco wants it at the garage — Bay PD wants you.',
+    reward: 3500,
+    steps: [
+      { id: 'pickup', text: 'Pick up the diamonds at Flamingo Beach', kind: 'goto', at: [228, 124], radius: 9 },
+      { id: 'deliver', text: "Get the diamonds to Marco's Garage — 120 seconds!", kind: 'goto', at: [124, -124], radius: 10, time: 120, wantedOnStart: 2 },
+      { id: 'vanish', text: 'Lose the heat, then reach the Bayfront Safehouse', kind: 'escape', at: [186, 186], radius: 11 },
+    ],
+  },
 ];
+
+// The Midnight Apex street race: a repeatable side activity. Drive through gate 1
+// in a car to start the clock, then hit gates 2–4 in order before it runs out.
+export const RACE_GATES = [
+  { at: [62, 186], axis: 'x' },
+  { at: [-124, 186], axis: 'x' },
+  { at: [-124, -62], axis: 'z' },
+  { at: [124, -62], axis: 'z' },
+];
+export const RACE_REWARD = 600;
+export const RACE_TIME_LIMIT = 100;
 
 // Named places the HUD and the minimap point at.
 export const PLACES = {

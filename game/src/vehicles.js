@@ -11,7 +11,11 @@ const headMat = new THREE.MeshBasicMaterial({ color: 0xfff2b0 });
 const tailMat = new THREE.MeshBasicMaterial({ color: 0xff2a2a });
 
 // A car is a body box, a cabin, four wheels and lights. `police` adds a light bar.
-export function buildCarMesh(color, police = false) {
+// `type` changes the whole silhouette: 'sedan' (the classic), 'taxi' (sedan plus a
+// roof sign), 'van' (one tall box, sliding-door look) and 'truck' (cab plus cargo).
+export function buildCarMesh(color, police = false, type = 'sedan') {
+  if (type === 'van') return buildVanMesh(color);
+  if (type === 'truck') return buildTruckMesh(color);
   const group = new THREE.Group();
   const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.5 });
   const body = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.62, 4.4), bodyMat);
@@ -40,6 +44,23 @@ export function buildCarMesh(color, police = false) {
     tail.position.set(x, 0.68, -2.24);
     group.add(tail);
   }
+  if (type === 'taxi') {
+    // A lit roof sign and a checkered door band mark the cab.
+    const sign = new THREE.Mesh(
+      new THREE.BoxGeometry(0.9, 0.3, 0.5),
+      new THREE.MeshBasicMaterial({ color: 0xffe9a8 }),
+    );
+    sign.position.set(0, 1.62, -0.25);
+    group.add(sign);
+    const bandMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    for (const side of [-1, 1]) {
+      for (let k = 0; k < 4; k += 1) {
+        const sq = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.22, 0.4), k % 2 ? bandMat : new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        sq.position.set(side * 1.06, 0.72, -0.9 + k * 0.45);
+        group.add(sq);
+      }
+    }
+  }
   let lightBar = null;
   if (police) {
     lightBar = new THREE.Group();
@@ -56,14 +77,92 @@ export function buildCarMesh(color, police = false) {
   return group;
 }
 
-export function makeCar(x, z, heading, color, police = false) {
+// A tall delivery van: one long box with a windshield band and bigger wheels.
+function buildVanMesh(color) {
+  const group = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.5, metalness: 0.3 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.9, 5.4), bodyMat);
+  body.position.y = 1.25;
+  body.castShadow = true;
+  group.add(body);
+  const shield = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.8, 0.1), glassMat);
+  shield.position.set(0, 1.55, 2.72);
+  shield.rotation.x = -0.18;
+  group.add(shield);
+  const doorMat = new THREE.MeshStandardMaterial({ color: 0x22222a, roughness: 0.6 });
+  for (const side of [-1, 1]) {
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.04, 1.1, 1.4), doorMat);
+    door.position.set(side * 1.16, 1.1, 0.4);
+    group.add(door);
+  }
+  const bigWheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.36, 10);
+  for (const [x, z] of [[-1.0, 1.8], [1.0, 1.8], [-1.0, -1.8], [1.0, -1.8]]) {
+    const wheel = new THREE.Mesh(bigWheelGeo, wheelMat);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(x, 0.5, z);
+    wheel.castShadow = true;
+    group.add(wheel);
+  }
+  for (const x of [-0.75, 0.75]) {
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.18, 0.08), headMat);
+    head.position.set(x, 0.8, 2.74);
+    group.add(head);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.18, 0.08), tailMat);
+    tail.position.set(x, 0.8, -2.74);
+    group.add(tail);
+  }
+  group.userData.lightBar = null;
+  return group;
+}
+
+// A box truck: a short cab up front, a tall cargo box behind, six wheels.
+function buildTruckMesh(color) {
+  const group = new THREE.Group();
+  const cabMat = new THREE.MeshStandardMaterial({ color, roughness: 0.4, metalness: 0.4 });
+  const cab = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.5, 1.7), cabMat);
+  cab.position.set(0, 1.05, 2.4);
+  cab.castShadow = true;
+  group.add(cab);
+  const shield = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.7, 0.1), glassMat);
+  shield.position.set(0, 1.35, 3.28);
+  group.add(shield);
+  const boxMat = new THREE.MeshStandardMaterial({ color: 0xd8d3c8, roughness: 0.7, metalness: 0.2 });
+  const cargo = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.2, 3.6), boxMat);
+  cargo.position.set(0, 1.5, -1.2);
+  cargo.castShadow = true;
+  group.add(cargo);
+  const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.42, 0.35, 3.62), new THREE.MeshStandardMaterial({ color, roughness: 0.6 }));
+  stripe.position.set(0, 1.9, -1.2);
+  group.add(stripe);
+  const bigWheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.36, 10);
+  for (const [x, z] of [[-1.0, 2.6], [1.0, 2.6], [-1.0, -0.6], [1.0, -0.6], [-1.0, -2.4], [1.0, -2.4]]) {
+    const wheel = new THREE.Mesh(bigWheelGeo, wheelMat);
+    wheel.rotation.z = Math.PI / 2;
+    wheel.position.set(x, 0.5, z);
+    wheel.castShadow = true;
+    group.add(wheel);
+  }
+  for (const x of [-0.75, 0.75]) {
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.18, 0.08), headMat);
+    head.position.set(x, 0.8, 3.28);
+    group.add(head);
+    const tail = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.18, 0.08), tailMat);
+    tail.position.set(x, 0.8, -3.02);
+    group.add(tail);
+  }
+  group.userData.lightBar = null;
+  return group;
+}
+
+export function makeCar(x, z, heading, color, police = false, type = 'sedan') {
   return {
-    mesh: buildCarMesh(color, police),
+    mesh: buildCarMesh(color, police, type),
     x, z, heading,
     speed: 0,
     steer: 0,
     health: 100,
     police,
+    type,
     bumpCooldown: 0,
     // Traffic state: which road axis it follows and where it turns next.
     axis: 'x',
@@ -110,13 +209,23 @@ export function driveCar(car, input, dt, colliders, onCrash) {
 
 // Traffic: each car cruises along a road centreline, turns at intersections, and
 // stops when the car ahead is close. Pure grid logic, no pathfinding needed.
+// The mix is mostly sedans, with taxis, vans and trucks so the road reads varied.
+function pickTrafficType(random) {
+  const roll = random.next();
+  if (roll < 0.58) return ['sedan', null];
+  if (roll < 0.74) return ['taxi', 0xf5c518];
+  if (roll < 0.88) return ['van', null];
+  return ['truck', null];
+}
+
 export function createTraffic(scene, random, count, parkedSpots) {
   const cars = [];
   for (let i = 0; i < count; i += 1) {
     const axis = random.chance(0.5) ? 'x' : 'z';
     const road = random.int(-GRID, GRID) * PITCH;
     const along = random.range(-CITY_HALF, CITY_HALF);
-    const car = makeCar(axis === 'x' ? along : road, axis === 'x' ? road : along, 0, random.pick(PALETTE.trafficCar));
+    const [type, fixedColor] = pickTrafficType(random);
+    const car = makeCar(axis === 'x' ? along : road, axis === 'x' ? road : along, 0, fixedColor ?? random.pick(PALETTE.trafficCar), false, type);
     car.axis = axis;
     car.dir = random.chance(0.5) ? 1 : -1;
     car.heading = axis === 'x' ? (car.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (car.dir > 0 ? 0 : Math.PI);
@@ -129,7 +238,8 @@ export function createTraffic(scene, random, count, parkedSpots) {
   }
   // Parked cars: same factory, no motion, dotted along the beach and side streets.
   for (const [x, z] of parkedSpots.slice(0, 12)) {
-    const car = makeCar(x, z, random.chance(0.5) ? 0 : Math.PI / 2, random.pick(PALETTE.trafficCar));
+    const [type, fixedColor] = pickTrafficType(random);
+    const car = makeCar(x, z, random.chance(0.5) ? 0 : Math.PI / 2, fixedColor ?? random.pick(PALETTE.trafficCar), false, type);
     car.parked = true;
     car.speed = 0;
     car.mesh.position.set(x, 0, z);

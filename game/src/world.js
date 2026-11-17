@@ -11,6 +11,7 @@ import { createPlayer, punchTarget, shootTarget, stepPlayerOnFoot } from './play
 import { addWanted, clearWanted, createPolice, stepPolice } from './police.js';
 import { MISSION_DONE, MISSION_FAILED, MISSION_STARTED, MISSION_STEP_DONE, createMissions, missionMarker, missionObjective, missionReward, missionTitle, startMission, startStory, stepMissions } from './missions.js';
 import { createEffects } from './effects.js';
+import { createRace, raceMarker, raceObjective, raceReward, stepRace, RACE_FAILED, RACE_GATE, RACE_STARTED, RACE_WON } from './race.js';
 import { createAudio } from './audio.js';
 import { createCamera } from './camera.js';
 import { createHud } from './hud.js';
@@ -45,6 +46,7 @@ export function createWorld(canvas, seed) {
   const player = createPlayer(scene);
   const police = createPolice(scene);
   const missions = createMissions(scene);
+  const race = createRace(scene);
 
   // The hero's own car: a hot pink Vortex GT parked on Palm Row.
   const playerCar = makeCar(0, 31, Math.PI, PALETTE.playerCar);
@@ -82,6 +84,8 @@ export function createWorld(canvas, seed) {
     saveTimer: 0,
     lastMissionKey: '',
     muted: false,
+    exhaustTimer: 0,
+    skidTimer: 0,
   };
 
   function saveGame() {
@@ -279,7 +283,7 @@ export function createWorld(canvas, seed) {
     if (mouse.x || mouse.y) cam.drag(mouse.x, mouse.y);
     if (wheel) cam.zoom(wheel);
 
-    const inCar = !!player.inCar;
+    let inCar = !!player.inCar;
     const threat = {
       x: inCar ? player.inCar.x : player.x,
       z: inCar ? player.inCar.z : player.z,
@@ -338,6 +342,23 @@ export function createWorld(canvas, seed) {
         effects.smoke(car.x + Math.sin(car.heading) * 1.5, car.z + Math.cos(car.heading) * 1.5);
       }
       if (actions & ACTION_ENTER) exitCar();
+      // Exhaust puffs while accelerating, skid dust while handbraking hard.
+      const rearX = car.x - Math.sin(car.heading) * 2.4;
+      const rearZ = car.z - Math.cos(car.heading) * 2.4;
+      if (drive.throttle > 0.5 && Math.abs(car.speed) > 5) {
+        state.exhaustTimer -= dt;
+        if (state.exhaustTimer <= 0) {
+          effects.exhaust(rearX, rearZ);
+          state.exhaustTimer = 0.12;
+        }
+      }
+      if (drive.brake && Math.abs(car.speed) > 10) {
+        state.skidTimer -= dt;
+        if (state.skidTimer <= 0) {
+          effects.dust(rearX, rearZ);
+          state.skidTimer = 0.08;
+        }
+      }
     } else {
       stepPlayerOnFoot(player, input.move(), cam.yaw, dt, city.colliders);
       if (actions & ACTION_ENTER) {
@@ -376,15 +397,21 @@ export function createWorld(canvas, seed) {
       }
     }
 
-    // Police chase the player (in a car or on foot) and ram.
+    // The player may have got in or out of a car in the branch above: refresh the
+    // flag so everything below reads the live state, not the step's start.
+    inCar = !!player.inCar;
+
+    // Police chase the player (in a car or on foot) and ram. Read player.inCar
+    // live here: the player may have just got out of the car this very step,
+    // and the `inCar` flag above is stale by then.
     const target = {
       x: player.x,
       z: player.z,
-      vx: inCar ? Math.sin(player.inCar.heading) * player.inCar.speed : 0,
-      vz: inCar ? Math.cos(player.inCar.heading) * player.inCar.speed : 0,
+      vx: player.inCar ? Math.sin(player.inCar.heading) * player.inCar.speed : 0,
+      vz: player.inCar ? Math.cos(player.inCar.heading) * player.inCar.speed : 0,
     };
     stepPolice(police, dt, target, city.colliders, random, (car) => {
-      if (inCar) {
+      if (player.inCar) {
         const impact = collideCars(player.inCar, car);
         if (impact > 5 && state.crashCooldown <= 0) {
           audio.crash();
@@ -433,6 +460,29 @@ export function createWorld(canvas, seed) {
     }
     missionEvents(events);
 
+    // The Midnight Apex street race runs alongside the story, in a car only.
+    const raceEvents = stepRace(race, dt, { x: player.x, z: player.z, inCar });
+    if (raceEvents & RACE_STARTED) {
+      audio.missionStart();
+      hud.showBanner('STREET RACE', 'Midnight Apex — hit gates 2, 3 and 4 before the clock runs out!', 3.5);
+    }
+    if (raceEvents & RACE_GATE) {
+      audio.pickup();
+      hud.showBanner(`GATE ${race.nextGate} OF 4`, `Next gate marked on the minimap — ${Math.ceil(race.timer)}s left.`, 2);
+    }
+    if (raceEvents & RACE_WON) {
+      const reward = raceReward();
+      state.cash += reward;
+      audio.missionComplete();
+      effects.confetti(player.x, 3, player.z);
+      hud.showBanner('RACE WON', `Midnight Apex pays +$${reward.toLocaleString('en-US')} — the circuit is yours.`, 4);
+      state.saveTimer = 0.5;
+    }
+    if (raceEvents & RACE_FAILED) {
+      audio.missionFail();
+      hud.showBanner('RACE OVER', 'Out of time — the gates reset. Drive through gate 1 to go again.', 3);
+    }
+
     // Tokens: walk or drive through a ring to bank $100.
     for (let i = 0; i < TOKEN_SPOTS.length; i += 1) {
       if (state.tokensTaken[i]) continue;
@@ -469,7 +519,7 @@ export function createWorld(canvas, seed) {
   }
 
   function updateHud() {
-    const marker = missionMarker(missions);
+    const marker = missionMarker(missions) || raceMarker(race);
     const hh = Math.floor(state.clockMinutes / 60) % 24;
     const mm = Math.floor(state.clockMinutes % 60);
     const nearCar = !player.inCar && nearestCar(4.6);
@@ -478,14 +528,16 @@ export function createWorld(canvas, seed) {
     else if (nearCar) hint = 'E get in the car • F punch • CLICK shoot • M mute';
     if (!missions.active && !missions.finished) hint = 'ENTER start the story • ' + hint;
     if (police.wanted > 0 && player.inCar) hint += ' • Spray & Shade clears heat ($100)';
+    if (race.active) hint = 'STREET RACE — follow the orange gate on the minimap!';
+    const raceOn = race.active;
     hud.update({
       cash: state.cash,
       health: Math.round(player.health),
       wanted: police.wanted,
-      missionTitle: missionTitle(missions),
-      missionText: missionObjective(missions),
+      missionTitle: raceOn ? 'STREET RACE — MIDNIGHT APEX' : missionTitle(missions),
+      missionText: raceOn ? raceObjective(race) : missionObjective(missions),
       missionDist: marker ? `${Math.round(distance2D(player.x, player.z, marker.x, marker.z))}m` : '',
-      missionTimerText: missions.timer > 0 ? `⏱ ${Math.ceil(missions.timer)}s` : '',
+      missionTimerText: raceOn ? `⏱ ${Math.ceil(race.timer)}s` : (missions.timer > 0 ? `⏱ ${Math.ceil(missions.timer)}s` : ''),
       clockText: `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`,
       inCar: !!player.inCar,
       speed: player.inCar ? player.inCar.speed : 0,
@@ -527,6 +579,7 @@ export function createWorld(canvas, seed) {
     audio,
     hud,
     missions,
+    race,
     police,
     player,
     playerCar,

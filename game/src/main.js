@@ -21,6 +21,8 @@ const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() 
 const canvas = document.getElementById('game');
 const world = createWorld(canvas, seed);
 const input = createInput(canvas);
+// Debug handle for automated checks (headless playtests drive missions through it).
+window.__world = world;
 
 // Overlays: the title, pause, busted, wasted and complete panels.
 const overlays = {
@@ -45,10 +47,10 @@ function showOnly(name) {
 function refreshTitle() {
   const save = world.loadSave();
   if (save && (save.cash > 0 || save.missionsDone > 0 || save.finished)) {
-    titleStats.textContent = `Saved: $${(save.cash || 0).toLocaleString('en-US')} • Missions done: ${save.missionsDone || 0}/3 • Tokens: ${(save.tokensTaken || []).filter(Boolean).length}/10`;
+    titleStats.textContent = `Saved: $${(save.cash || 0).toLocaleString('en-US')} • Missions done: ${save.missionsDone || 0}/5 • Tokens: ${(save.tokensTaken || []).filter(Boolean).length}/10`;
     continueButton.classList.remove('hidden');
   } else {
-    titleStats.textContent = 'A sun-soaked city. Three jobs. One wheelman.';
+    titleStats.textContent = 'A sun-soaked city. Five jobs. One wheelman.';
     continueButton.classList.add('hidden');
   }
 }
