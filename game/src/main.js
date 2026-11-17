@@ -1,17 +1,16 @@
-// Boot and the one loop: input is read every frame, the world advances in fixed 1/60 s steps
-// (several in a slow frame, none in a fast one), and the renderer paints what is there. The game
-// moves between four screens: title, play, paused and game over.
+// Neon Bay Heat — boot and the one loop: input is read every frame, the world
+// advances in fixed 1/60 s steps, and the renderer paints what is there. The game
+// moves between title, play, paused, busted, wasted and story-complete screens.
 //
-// ?seed=N fixes the falling pattern. ?shot=start|play|end (with &seed=N) stages that scene
-// instead of running the loop, paints it twice and sets window.__shotReady for a screenshot.
-import { BEST_KEY, LIVES, STEP } from './config.js';
+// ?seed=N fixes the city and the traffic. ?shot=start|play|foot|end (with &seed=N)
+// stages that scene instead of running the loop, paints it twice and sets
+// window.__shotReady for a screenshot.
+import { STEP } from './config.js';
 import { createRandom } from './random.js';
-import { createWorld, EVENT_HIT, EVENT_OVER } from './world.js';
-import { ACTION_CONFIRM, ACTION_PAUSE, createInput } from './input.js';
-import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+import { createWorld, SCREEN_BUSTED, SCREEN_COMPLETE, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE, SCREEN_WASTED } from './world.js';
+import { ACTION_CONFIRM, ACTION_MUTE, ACTION_PAUSE, createInput } from './input.js';
 import { stageShot } from './shots.js';
 
-/** The longest frame the loop catches up on; a longer stall (a hidden tab) is dropped, not replayed. */
 const MAX_FRAME = 0.25;
 
 const params = new URLSearchParams(window.location.search);
@@ -20,31 +19,49 @@ const seedParam = Number.parseInt(params.get('seed') ?? '', 10);
 const seed = Number.isInteger(seedParam) ? seedParam : Math.floor(Math.random() * 4294967296);
 
 const canvas = document.getElementById('game');
-const status = document.getElementById('status');
-const world = createWorld(createRandom(seed));
-const renderer = createRenderer(canvas);
+const world = createWorld(canvas, seed);
+const input = createInput(canvas);
 
-function readBest() {
-  try {
-    return Number.parseInt(window.localStorage.getItem(BEST_KEY) ?? '0', 10) || 0;
-  } catch {
-    return 0;
+// Overlays: the title, pause, busted, wasted and complete panels.
+const overlays = {
+  title: document.getElementById('screen-title'),
+  paused: document.getElementById('screen-paused'),
+  busted: document.getElementById('screen-busted'),
+  wasted: document.getElementById('screen-wasted'),
+  complete: document.getElementById('screen-complete'),
+};
+const hud = document.getElementById('hud');
+const titleStats = document.getElementById('title-stats');
+const continueButton = document.getElementById('btn-continue');
+const startButton = document.getElementById('btn-start');
+
+function showOnly(name) {
+  for (const [key, el] of Object.entries(overlays)) {
+    if (el) el.classList.toggle('hidden', key !== name);
   }
+  if (hud) hud.classList.toggle('hidden', name === 'title');
 }
 
-function saveBest(value) {
-  try {
-    window.localStorage.setItem(BEST_KEY, String(value));
-  } catch {
-    // Storage can be off (private windows): the best score then lasts this visit only.
+function refreshTitle() {
+  const save = world.loadSave();
+  if (save && (save.cash > 0 || save.missionsDone > 0 || save.finished)) {
+    titleStats.textContent = `Saved: $${(save.cash || 0).toLocaleString('en-US')} • Missions done: ${save.missionsDone || 0}/3 • Tokens: ${(save.tokensTaken || []).filter(Boolean).length}/10`;
+    continueButton.classList.remove('hidden');
+  } else {
+    titleStats.textContent = 'A sun-soaked city. Three jobs. One wheelman.';
+    continueButton.classList.add('hidden');
   }
 }
 
 function runShot(name) {
-  const scene = stageShot(name, world);
+  const screen = stageShot(name, world);
+  // In shot mode the overlays stay off except the title: the HUD and the banner
+  // are the story of the play, foot and end frames.
+  showOnly(screen === SCREEN_TITLE ? 'title' : null);
+  if (screen === SCREEN_TITLE) refreshTitle();
   let painted = 0;
   function paint() {
-    renderer.draw(world.state, scene.screen, scene.best);
+    world.render();
     painted += 1;
     if (painted < 2) requestAnimationFrame(paint);
     else window.__shotReady = true;
@@ -53,80 +70,86 @@ function runShot(name) {
 }
 
 function runGame() {
-  const input = createInput(canvas);
-  let screen = SCREEN_TITLE;
-  let best = readBest();
   let accumulator = 0;
   let last = performance.now();
+  let lastScreen = null;
 
-  // Screen readers (and anyone watching the page's text) hear the screen changes and each hit.
-  function announce(message) {
-    status.textContent = message;
-  }
-
-  function startGame() {
-    world.reset();
-    accumulator = 0;
-    screen = SCREEN_PLAY;
-    announce(`Playing. ${LIVES} lives.`);
-  }
-
-  function endGame() {
-    screen = SCREEN_OVER;
-    if (world.state.score > best) {
-      best = world.state.score;
-      saveBest(best);
-    }
-    announce(`Game over. Score ${world.state.score}. Best ${best}.`);
-  }
-
-  function handleActions() {
-    const actions = input.takeActions();
-    if (actions & ACTION_CONFIRM && (screen === SCREEN_TITLE || screen === SCREEN_OVER)) startGame();
-    else if (actions & ACTION_PAUSE && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
-    } else if (actions & (ACTION_PAUSE | ACTION_CONFIRM) && screen === SCREEN_PAUSED) {
-      screen = SCREEN_PLAY;
-      announce('Playing.');
-    }
-  }
-
-  function step() {
+  function syncOverlays() {
+    const screen = world.screen();
+    if (screen === lastScreen) return;
+    lastScreen = screen;
     if (screen === SCREEN_TITLE) {
-      world.step(STEP, 0, true);
-      return;
-    }
-    const events = world.step(STEP, input.direction(), false);
-    if (events & EVENT_OVER) endGame();
-    else if (events & EVENT_HIT) announce(world.state.lives === 1 ? 'Hit. 1 life left.' : `Hit. ${world.state.lives} lives left.`);
+      refreshTitle();
+      showOnly('title');
+    } else if (screen === SCREEN_PAUSED) showOnly('paused');
+    else if (screen === SCREEN_BUSTED) showOnly('busted');
+    else if (screen === SCREEN_WASTED) showOnly('wasted');
+    else if (screen === SCREEN_COMPLETE) showOnly('complete');
+    else showOnly(null);
   }
 
   function frame(now) {
     requestAnimationFrame(frame);
     accumulator += Math.min((now - last) / 1000, MAX_FRAME);
     last = now;
-    handleActions();
-    if (screen === SCREEN_TITLE || screen === SCREEN_PLAY) {
-      while (accumulator >= STEP && (screen === SCREEN_TITLE || screen === SCREEN_PLAY)) {
-        step();
-        accumulator -= STEP;
-      }
-    } else {
-      accumulator = 0;
+    const actions = input.takeActions();
+    if (actions & ACTION_MUTE) {
+      const muted = !world.audio.isMuted();
+      world.audio.setMuted(muted);
     }
-    renderer.draw(world.state, screen, best);
+    const screen = world.screen();
+    if (screen === SCREEN_TITLE) {
+      if (actions & ACTION_CONFIRM) world.startGame(false);
+      world.stepAmbient(STEP);
+    } else if (screen === SCREEN_PLAY) {
+      // One-shot presses go to the first step only: the same E must not enter
+      // and then leave the car in one frame.
+      let first = true;
+      while (accumulator >= STEP) {
+        world.stepPlay(STEP, input, first ? actions : 0);
+        first = false;
+        accumulator -= STEP;
+        if (world.screen() !== SCREEN_PLAY) break;
+      }
+    } else if (screen === SCREEN_PAUSED) {
+      if (actions & (ACTION_PAUSE | ACTION_CONFIRM)) world.setScreen(SCREEN_PLAY);
+    } else if (screen === SCREEN_BUSTED || screen === SCREEN_WASTED) {
+      if (actions & ACTION_CONFIRM) world.respawn();
+    } else if (screen === SCREEN_COMPLETE) {
+      if (actions & ACTION_CONFIRM) world.setScreen(SCREEN_PLAY);
+    }
+    syncOverlays();
+    world.render();
   }
 
-  // Leaving the tab pauses a running game rather than letting blocks fall unseen.
+  // Buttons on the overlays do what the keys do.
+  startButton?.addEventListener('click', () => {
+    world.audio.unlock();
+    world.startGame(true);
+  });
+  continueButton?.addEventListener('click', () => {
+    world.audio.unlock();
+    world.startGame(false);
+  });
+  document.getElementById('btn-resume')?.addEventListener('click', () => world.setScreen(SCREEN_PLAY));
+  document.getElementById('btn-restart-mission')?.addEventListener('click', () => {
+    world.respawn();
+  });
+  document.getElementById('btn-quit-title')?.addEventListener('click', () => {
+    world.setScreen(SCREEN_TITLE);
+    world.resetRun();
+  });
+  document.getElementById('btn-continue-roam')?.addEventListener('click', () => world.setScreen(SCREEN_PLAY));
+  document.getElementById('btn-busted-ok')?.addEventListener('click', () => world.respawn());
+  document.getElementById('btn-wasted-ok')?.addEventListener('click', () => world.respawn());
+
+  // Leaving the tab pauses a running game rather than letting the heat pile up unseen.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden && screen === SCREEN_PLAY) {
-      screen = SCREEN_PAUSED;
-      announce('Paused.');
-    }
+    if (document.hidden && world.screen() === SCREEN_PLAY) world.setScreen(SCREEN_PAUSED);
   });
 
-  announce('Block Dodger. Press Space or click to start.');
+  refreshTitle();
+  syncOverlays();
   requestAnimationFrame(frame);
 }
 

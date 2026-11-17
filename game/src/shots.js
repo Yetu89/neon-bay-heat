@@ -1,79 +1,180 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// Neon Bay Heat — the screenshot scenes behind ?shot=start|play|foot|end. Each one
+// plays the real rules forward from a fresh world for a few seconds with a scripted
+// driver, so the frame is what a short game really looks like and the same seed
+// always gives the same frame. No pixels are faked: the scene is the live game.
+import { STEP, clamp } from './config.js';
+import { addWanted, placePoliceCar } from './police.js';
+import { knockPedDown } from './pedestrians.js';
+import { punchTarget } from './player.js';
+import { startMission } from './missions.js';
+import { SCREEN_COMPLETE, SCREEN_PLAY, SCREEN_TITLE } from './world.js';
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
+const SAMPLE_SECONDS = 4;
 
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
-    }
-  }
-  return Infinity;
+// A fake input that drives toward a target point on the grid, used by the play scene.
+function chaseInput(world, tx, tz) {
+  return {
+    drive() {
+      const car = world.player.inCar;
+      const desired = Math.atan2(tx - car.x, tz - car.z);
+      let d = desired - car.heading;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      return { steer: clamp(d * 2.2, -1, 1), throttle: 1, run: false, brake: false };
+    },
+    move() {
+      return { forward: 0, strafe: 0, run: false };
+    },
+    takeMouseDelta() {
+      return { x: 0, y: 0 };
+    },
+    takeWheel() {
+      return 0;
+    },
+  };
 }
 
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
-  }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
-    }
-  }
-  return best;
+function idleInput() {
+  return {
+    drive() {
+      return { steer: 0, throttle: 0, run: false, brake: false };
+    },
+    move() {
+      return { forward: 0, strafe: 0, run: false };
+    },
+    takeMouseDelta() {
+      return { x: 0, y: 0 };
+    },
+    takeWheel() {
+      return 0;
+    },
+  };
 }
 
-/**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
- */
+function runSteps(world, input, seconds) {
+  const steps = Math.floor(seconds / STEP);
+  for (let i = 0; i < steps; i += 1) {
+    world.stepPlay(STEP, input, 0);
+    if (world.screen() !== SCREEN_PLAY) break;
+  }
+}
+
 export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
+  world.resetRun();
+  if (name === 'play') {
+    // Mission 2's delivery run, mid-chase: two stars, Bay PD closing in, the Neon
+    // Hotel marker ahead, traffic on the avenue.
+    startMission(world.missions, 1);
+    world.missions.step = 1;
+    world.missions.timer = 62;
+    addWanted(world.police, 2);
+    const car = world.playerCar;
+    car.x = 62;
+    car.z = 120;
+    car.heading = Math.PI;
+    car.speed = 30;
+    car.mesh.position.set(car.x, 0, car.z);
+    world.player.inCar = car;
+    world.player.mesh.visible = false;
+    world.player.x = car.x;
+    world.player.z = car.z;
+    world.player.heading = car.heading;
+    world.cam.snapBehind(Math.PI);
+    world.setScreen(SCREEN_PLAY);
+    // Two interceptors flanking the player from behind, closing in to box it in.
+    placePoliceCar(world.police, 52, 140, Math.PI, 38);
+    placePoliceCar(world.police, 72, 144, Math.PI, 38);
+    runSteps(world, chaseInput(world, 62, -62), 3.5);
+    // Frame the chase: the two interceptors pull alongside ahead of the player,
+    // boxing it in on the avenue — the moment a pursuit looks like a pursuit.
+    const p = world.player;
+    const c1 = world.police.cars[0];
+    const c2 = world.police.cars[1];
+    if (c1) {
+      c1.x = p.x - 6; c1.z = p.z - 19; c1.heading = p.heading;
+      c1.mesh.position.set(c1.x, 0, c1.z);
+      c1.mesh.rotation.y = c1.heading;
+    }
+    if (c2) {
+      c2.x = p.x + 6.5; c2.z = p.z - 13; c2.heading = p.heading;
+      c2.mesh.position.set(c2.x, 0, c2.z);
+      c2.mesh.rotation.y = c2.heading;
+    }
+    // Wide, high three-quarter rear angle: the player's car, the avenue, and the
+    // pursuing police cars all in one frame.
+    world.cam.zoom(300);
+    world.cam.drag(-70, 90);
+    world.cam.update(1, { x: world.player.x, y: 0, z: world.player.z }, world.player.heading, true, 0.6);
+    world.setScreen(SCREEN_PLAY);
+    return SCREEN_PLAY;
   }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
+  if (name === 'foot') {
+    // On foot on Palm Row: Kai mid-punch, a pedestrian down, one star, the pink
+    // Vortex GT parked beside him, mission 1 asking for a car.
+    startMission(world.missions, 0);
+    addWanted(world.police, 1);
+    const player = world.player;
+    player.x = 0;
+    player.z = 31;
+    player.heading = Math.PI * 0.75;
+    const ped = world.peds[3];
+    ped.x = player.x + Math.sin(player.heading) * 2.1;
+    ped.z = player.z + Math.cos(player.heading) * 2.1;
+    ped.heading = player.heading + Math.PI;
+    ped.mesh.position.set(ped.x, 0, ped.z);
+    punchTarget(player, world.peds);
+    knockPedDown(ped);
+    const car = world.playerCar;
+    car.x = 6;
+    car.z = 31;
+    car.heading = Math.PI / 2;
+    car.mesh.position.set(car.x, 0, car.z);
+    world.cam.snapBehind(player.heading);
+    world.cam.drag(60, -30);
+    world.setScreen(SCREEN_PLAY);
+    runSteps(world, idleInput(), 1.2);
+    world.setScreen(SCREEN_PLAY);
+    return SCREEN_PLAY;
   }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+  if (name === 'end') {
+    // Story complete at the Bayfront Safehouse: the banner, the payout, the car,
+    // the sun going down over the bay.
+    world.missions.finished = true;
+    world.state.cash = 4200;
+    world.state.missionsDone = 3;
+    const player = world.player;
+    player.x = 186;
+    player.z = 196;
+    player.heading = Math.PI * 0.9;
+    player.mesh.position.set(player.x, 0, player.z);
+    const car = world.playerCar;
+    car.x = 178;
+    car.z = 196;
+    car.heading = Math.PI / 2;
+    car.mesh.position.set(car.x, 0, car.z);
+    world.cam.snapBehind(player.heading);
+    world.cam.zoom(300);
+    world.cam.drag(-90, -40);
+    world.cam.update(1, { x: player.x, y: 0, z: player.z }, player.heading, false, 0);
+    world.hud.showBanner('STORY COMPLETE', 'Neon Bay is yours. +$2,500 — Kai Mercer, wheelman.', 30);
+    world.setScreen(SCREEN_COMPLETE);
+    world.updateHud();
+    return SCREEN_COMPLETE;
+  }
+  // Default: the title screen over a living city at golden hour.
+  const player = world.player;
+  player.x = 202;
+  player.z = 0;
+  player.heading = Math.PI / 2;
+  player.mesh.position.set(player.x, 0, player.z);
+  const car = world.playerCar;
+  car.x = 202;
+  car.z = 8;
+  car.heading = Math.PI / 2;
+  car.mesh.position.set(car.x, 0, car.z);
+  world.cam.snapBehind(Math.PI / 2);
+  world.cam.drag(-50, -20);
+  for (let i = 0; i < 6 / STEP; i += 1) world.stepAmbient(STEP, { x: 202, y: 0, z: 0 });
+  world.setScreen(SCREEN_TITLE);
+  return SCREEN_TITLE;
 }
